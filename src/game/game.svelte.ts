@@ -1,7 +1,16 @@
 import { type Played, type Refusal, explain, play, resolveClick, resolveDrop } from '../engine/actions.ts';
 import type { Card } from '../engine/cards.ts';
 import { deal, randomDealNumber } from '../engine/deal.ts';
-import { type HintPlan, type Step, buildPlan, keyAfter, resolveStep, stepMoves } from '../engine/hint.ts';
+import {
+  type HintPlan,
+  type Reason,
+  type Step,
+  buildPlan,
+  keyAfter,
+  resolveStep,
+  stepMoves,
+  stepReasons,
+} from '../engine/hint.ts';
 import { type SolverMove, canonicalKey } from '../engine/solver.ts';
 import {
   FOUNDATION,
@@ -59,7 +68,7 @@ export type Panel =
   | { kind: 'thinking' }
   | { kind: 'unsure'; rollbackMoves: number }
   | { kind: 'goal'; target: Card; stepCount: number }
-  | { kind: 'steps'; target: Card; steps: Step[]; done: number; total: number };
+  | { kind: 'steps'; target: Card; steps: Step[]; reasons: (Reason | null)[]; done: number; total: number };
 
 export class Game {
   dealNumber = $state(0);
@@ -169,7 +178,8 @@ export class Game {
     if (!plan) return { kind: 'thinking' };
     if (this.#hintLevel === 1) return { kind: 'goal', target: plan.target, stepCount: plan.steps.length };
     const total = Math.max(this.#goal?.total ?? 0, plan.steps.length);
-    return { kind: 'steps', target: plan.target, steps: plan.steps, done: total - plan.steps.length, total };
+    const reasons = stepReasons(this.state, plan.steps);
+    return { kind: 'steps', target: plan.target, steps: plan.steps, reasons, done: total - plan.steps.length, total };
   });
 
   /** Restores the saved game, or deals a new one. A deal number forces that deal. */
@@ -251,6 +261,10 @@ export class Game {
   }
 
   clickCard(card: Card): boolean {
+    // While a step is on show, a click on its card is the player taking the
+    // hint, so it goes where the hint points even if a plain click would not.
+    const step = this.#hintLevel === 2 ? this.plan?.steps[0] : undefined;
+    if (step?.card === card && this.playHintStep()) return true;
     return this.#attempt(card, (state) => resolveClick(state, card));
   }
 
@@ -296,15 +310,19 @@ export class Game {
     const position: Position = { state: result.state, enteredAt: this.#now(), verdict: null, analysis: null };
 
     // A position reached from a lost one is lost too, and following the known
-    // winning line leaves the rest of that line standing, so neither needs a search.
+    // winning line keeps the game winnable, so neither needs a search to judge.
+    // The line itself is only reused while the tidied part of it lasts.
     const known = before.analysis;
     if (before.verdict === 'unwinnable') {
       position.verdict = 'unwinnable';
-      position.analysis = { status: 'unwinnable', steps: [], explored: 0 };
+      position.analysis = { status: 'unwinnable', steps: [], planLength: 0, explored: 0 };
     } else if (known?.status === 'winnable' && known.steps.length > 0) {
       if (keyAfter(before.state, known.steps[0]) === canonicalKey(result.state)) {
         position.verdict = 'winnable';
-        position.analysis = { status: 'winnable', steps: known.steps.slice(1), explored: 0 };
+        if (known.planLength > 1) {
+          const steps = known.steps.slice(1);
+          position.analysis = { status: 'winnable', steps, planLength: known.planLength - 1, explored: 0 };
+        }
       }
     }
 

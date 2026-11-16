@@ -6,6 +6,8 @@ export interface Analysis {
   status: SolveStatus;
   /** A winning line of play from the analysed position; empty unless winnable. */
   steps: Step[];
+  /** How many leading steps were tidied into a plan for the next card to go home. */
+  planLength: number;
   explored: number;
 }
 

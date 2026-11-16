@@ -239,22 +239,58 @@ describe('hints', () => {
     expect(game.panel).toMatchObject({ kind: 'achieved' });
   });
 
-  it('does not search again while the player follows the known line', async () => {
+  it('does not search again while the player follows the plan', async () => {
     const { analyst, analyse } = countingAnalyst();
     const game = makeGame({ analyst });
-    await game.start(1);
+    await game.start(617);
     expect(analyse).toHaveBeenCalledTimes(1);
 
     game.hint();
     game.hint();
-    game.playHintStep();
-    game.playHintStep();
+    const total = (game.panel as { total: number }).total;
+    expect(total).toBeGreaterThan(2);
+    for (let i = 0; i < total - 1; i++) game.playHintStep();
     await settle();
     expect(analyse).toHaveBeenCalledTimes(1);
+    expect(game.panel).toMatchObject({ kind: 'steps', done: total - 1, total });
 
-    game.clickCard(card('6H'));
+    game.playHintStep();
     await settle();
+    expect(game.panel).toMatchObject({ kind: 'achieved' });
     expect(analyse).toHaveBeenCalledTimes(2);
+  });
+
+  it('explains what each step is for', async () => {
+    const game = makeGame();
+    await game.start(617);
+    game.hint();
+    game.hint();
+    const panel = game.panel as { steps: unknown[]; reasons: unknown[] };
+    expect(panel.reasons).toHaveLength(panel.steps.length);
+    expect(panel.reasons.at(-1)).toEqual({ kind: 'release', card: card('AC') });
+    expect(panel.reasons.every((reason) => reason !== null)).toBe(true);
+  });
+
+  it('takes the hint when the player clicks the card it points at', async () => {
+    const game = makeGame();
+    await game.start(42);
+    for (let guard = 0; guard < 400 && !game.won; guard++) {
+      if (game.hintLevel < 2) {
+        game.hint();
+        await settle();
+        continue;
+      }
+      const before = game.moveCount;
+      const expected = game.hintMove!;
+      const cascade = game.state.cascades[expected.from];
+      const head = expected.from < CELL0 ? cascade[cascade.length - expected.count] : game.state.cells[expected.from - CELL0]!;
+      expect(game.clickCard(head)).toBe(true);
+      expect(game.moveCount).toBe(before + 1);
+      const panel = game.panel;
+      expect(panel?.kind === 'steps' || panel?.kind === 'achieved' || panel?.kind === 'won').toBe(true);
+      await settle();
+    }
+    expect(game.won).toBe(true);
   });
 
   it('replans when the player goes their own way', async () => {

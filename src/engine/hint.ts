@@ -112,6 +112,79 @@ export function keyAfter(start: GameState, step: Step): string | null {
   return canonicalKey(state);
 }
 
+/** What a step is for, in terms of the steps that come after it. */
+export type Reason =
+  | { kind: 'release'; card: Card }
+  | { kind: 'uncover'; card: Card }
+  | { kind: 'clear'; card: Card; for: Card }
+  | { kind: 'landing'; card: Card }
+  | { kind: 'column' }
+  | { kind: 'cell' };
+
+export function stepReasons(start: GameState, steps: Step[]): (Reason | null)[] {
+  interface Info {
+    step: Step;
+    fromCell: boolean;
+    moved: Card[];
+    uncovered: Card | null;
+    emptied: boolean;
+    released: Card | null;
+  }
+  const state = cloneState(start);
+  const infos: Info[] = [];
+  for (const step of steps) {
+    const move = resolveStep(state, step);
+    if (!move) break;
+    const source = isCascade(move.from) ? state.cascades[move.from] : null;
+    const moved = source ? source.slice(source.length - move.count) : [step.card];
+    applyStackMove(state, move);
+    const auto = nextAutoMove(state);
+    infos.push({
+      step,
+      fromCell: source === null,
+      moved,
+      uncovered: source && source.length > 0 ? source[source.length - 1] : null,
+      emptied: source !== null && source.length === 0,
+      released: auto ? sourceCard(state, auto.from) : null,
+    });
+    autoHome(state);
+  }
+
+  return steps.map((step, i) => {
+    const info = infos[i];
+    if (!info || step.dest.kind === 'home') return null;
+    if (info.released !== null) return { kind: 'release', card: info.released };
+    const later = infos.slice(i + 1);
+    const uncovered = info.uncovered;
+    if (uncovered !== null && later.some((l) => l.moved.includes(uncovered))) return { kind: 'uncover', card: uncovered };
+    const needs = uncovered === null ? undefined : later.find((l) => l.step.dest.kind === 'onto' && l.step.dest.card === uncovered);
+    if (needs) return { kind: 'clear', card: uncovered!, for: needs.step.card };
+    const top = info.moved[info.moved.length - 1];
+    const lander = later.find((l) => l.step.dest.kind === 'onto' && l.step.dest.card === top);
+    if (lander) return { kind: 'landing', card: lander.step.card };
+    if (info.emptied && later.some((l) => l.step.dest.kind === 'empty')) return { kind: 'column' };
+    if (info.fromCell && later.some((l) => l.step.dest.kind === 'cell')) return { kind: 'cell' };
+    return null;
+  });
+}
+
+export function reasonParts(reason: Reason): (string | Card)[] {
+  switch (reason.kind) {
+    case 'release':
+      return ['frees the ', reason.card, ' to go home'];
+    case 'uncover':
+      return ['uncovers the ', reason.card];
+    case 'clear':
+      return ['clears the ', reason.card, ' for the ', reason.for];
+    case 'landing':
+      return ['makes a place for the ', reason.card];
+    case 'column':
+      return ['opens up a column'];
+    case 'cell':
+      return ['frees a cell'];
+  }
+}
+
 /** A step as prose, with cards left as values so the UI can draw them. */
 export function stepParts(step: Step): (string | Card)[] {
   const riders = step.count - 1;

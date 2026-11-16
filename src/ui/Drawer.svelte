@@ -2,7 +2,7 @@
   import { backOut, cubicIn } from 'svelte/easing';
   import { fly } from 'svelte/transition';
   import { type Card, cardLabel, isRed } from '../engine/cards.ts';
-  import { stepParts } from '../engine/hint.ts';
+  import { reasonParts, stepParts } from '../engine/hint.ts';
   import type { Game } from '../game/game.svelte.ts';
 
   let { game, height = $bindable(0) }: { game: Game; height?: number } = $props();
@@ -87,10 +87,17 @@
         Getting the {@render name(panel.target)} home · step {panel.done + 1} of {panel.total}
       </p>
       <p class="lead step">{@render prose(stepParts(panel.steps[0]))}</p>
+      {#if panel.reasons[0]}
+        <p class="why">This {@render prose(reasonParts(panel.reasons[0]))}.</p>
+      {/if}
       {#if panel.steps.length > 1}
         <ol class="upcoming" start={panel.done + 2}>
           {#each panel.steps.slice(1) as step, i (i)}
-            <li>{@render prose(stepParts(step))}</li>
+            {@const reason = panel.reasons[i + 1]}
+            <li>
+              {@render prose(stepParts(step))}
+              {#if reason}<span class="because">({@render prose(reasonParts(reason))})</span>{/if}
+            </li>
           {/each}
         </ol>
       {/if}
@@ -133,6 +140,14 @@
   .lead {
     font-size: 1.02rem;
     font-weight: 600;
+  }
+  .why {
+    margin-top: 2px;
+    font-size: 0.9rem;
+    opacity: 0.78;
+  }
+  .because {
+    opacity: 0.8;
   }
   .eyebrow {
     margin-bottom: 4px;

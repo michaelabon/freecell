@@ -5,29 +5,12 @@ import { deal } from './deal.ts';
 import { buildPlan, keyAfter, resolveStep, stepMoves, toSteps } from './hint.ts';
 import { stateFromLayout } from './notation.ts';
 import { canonicalKey, legalMoves, solve } from './solver.ts';
-import { FOUNDATION, type GameState, applyMove, assertValid, autoHome, canMove, cloneState, isWon, locate } from './state.ts';
-import { reachableState } from './testing.ts';
+import { FOUNDATION, type GameState, autoHome, cloneState, isWon, locate } from './state.ts';
+import { playOut, reachableState } from './testing.ts';
 
 function dealt(dealNumber: number): GameState {
   const state = deal(dealNumber);
   autoHome(state);
-  return state;
-}
-
-/** Plays a solution through the same single-card path the game uses, checking every move. */
-function playOut(start: GameState, steps: ReturnType<typeof toSteps>): GameState {
-  let state = start;
-  for (const step of steps) {
-    const moves = stepMoves(state, step);
-    if (!moves) throw new Error('Solution step cannot be carried out');
-    const check = cloneState(state);
-    for (const move of moves) {
-      if (!canMove(check, move)) throw new Error('Solution step breaks the rules');
-      applyMove(check, move);
-    }
-    state = play(state, moves).state;
-    assertValid(state);
-  }
   return state;
 }
 

@@ -25,6 +25,16 @@
     return () => game.dispose();
   });
 
+  // The address always names the deal on the table, so a reload or a shared
+  // link brings back the same game even after dealing a new one.
+  $effect(() => {
+    if (!game.ready) return;
+    const url = new URL(location.href);
+    if (game.dealNumber > 0) url.searchParams.set('deal', String(game.dealNumber));
+    else url.searchParams.delete('deal');
+    if (url.href !== location.href) history.replaceState(null, '', url);
+  });
+
   function onkeydown(event: KeyboardEvent) {
     if (event.target instanceof HTMLInputElement) return;
     const key = event.key.toLowerCase();

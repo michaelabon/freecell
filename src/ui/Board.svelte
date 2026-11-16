@@ -6,8 +6,11 @@
   import Suit from './Suit.svelte';
   import {
     FOUNDATION_SUITS,
+    TOP_SCALE,
     boardWidth,
+    cellX,
     columnX,
+    foundationSlotX,
     computeMetrics,
     landingSpot,
     pileAt,
@@ -107,7 +110,8 @@
     }
     const origin = placed[finished.card];
     if (!origin) return;
-    const target = pileAt(m, origin.x + finished.dx + m.cardW / 2, origin.y + finished.dy + m.cardH / 2);
+    const half = origin.scale / 2;
+    const target = pileAt(m, origin.x + finished.dx + m.cardW * half, origin.y + finished.dy + m.cardH * half);
     if (target !== null) game.dropCard(finished.card, target);
   }
 
@@ -126,10 +130,10 @@
       style:--card-h="{m.cardH}px"
     >
       {#each Array(CELL_COUNT) as _, i (i)}
-        <div class="slot cell" style:transform="translate({columnX(m, i)}px, 0)"></div>
+        <div class="slot cell" style:transform="translate({cellX(m, i)}px, 0) scale({TOP_SCALE})"></div>
       {/each}
       {#each FOUNDATION_SUITS as suit, i (suit)}
-        <div class="slot home" style:transform="translate({columnX(m, CELL_COUNT + i)}px, 0)">
+        <div class="slot home" style:transform="translate({foundationSlotX(m, i)}px, 0) scale({TOP_SCALE})">
           <span><Suit {suit} /></span>
         </div>
       {/each}
@@ -138,7 +142,7 @@
       {/each}
 
       {#if landing}
-        <div class="landing" style:transform="translate({landing.x}px, {landing.y}px)"></div>
+        <div class="landing" style:transform="translate({landing.x}px, {landing.y}px) scale({landing.scale})"></div>
       {/if}
 
       {#each visible as p (p.card)}
@@ -147,6 +151,7 @@
           x={dragged.has(p.card) ? p.x + drag!.dx : p.x}
           y={dragged.has(p.card) ? p.y + drag!.dy : p.y}
           z={p.z}
+          scale={dragged.has(p.card) ? 1 : p.scale}
           strip={p.strip}
           index={indexSize(p.strip)}
           dragging={dragged.has(p.card)}
@@ -177,6 +182,7 @@
     position: absolute;
     left: 0;
     top: 0;
+    transform-origin: 0 0;
     width: var(--card-w);
     height: var(--card-h);
     border-radius: calc(var(--card-w) * 0.09);
@@ -200,6 +206,7 @@
     position: absolute;
     left: 0;
     top: 0;
+    transform-origin: 0 0;
     z-index: 900;
     width: var(--card-w);
     height: var(--card-h);

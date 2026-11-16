@@ -8,6 +8,7 @@
     x: number;
     y: number;
     z: number;
+    scale: number;
     strip: number | null;
     /** Font size of the corner rank and suit, in pixels. */
     index: number;
@@ -17,7 +18,7 @@
     sparkle?: boolean;
     glow?: boolean;
   }
-  let { card, x, y, z, strip, index, dragging = false, dim = false, wiggle = 0, sparkle = false, glow = false }: Props = $props();
+  let { card, x, y, z, scale, strip, index, dragging = false, dim = false, wiggle = 0, sparkle = false, glow = false }: Props = $props();
 
   const LIFT_MS = 380;
   let face: HTMLElement;
@@ -59,9 +60,8 @@
   class:glow
   data-card={cardCode(card)}
   role="button"
-  tabindex="-1"
   aria-label="{RANK_NAMES[rankOf(card)]} of {SUIT_NAMES[suitOf(card)]}"
-  style:transform="translate3d({x}px, {y}px, 0)"
+  style:transform="translate3d({x}px, {y}px, 0) scale({scale})"
   style:z-index={dragging ? 2000 + z : lifted ? 1000 + z : z}
 >
   <div class="face" bind:this={face}>
@@ -91,6 +91,7 @@
     top: 0;
     width: var(--card-w);
     height: var(--card-h);
+    transform-origin: 0 0;
     transition: transform var(--move-ms) var(--move-ease);
     will-change: transform;
     touch-action: none;

@@ -45,12 +45,28 @@
   let width = $state(0);
   let height = $state(0);
   let drag = $state.raw<Drag | null>(null);
+  // Where the cards of a dropped stack were let go. Each one hangs there
+  // until its own turn in the move, so the stack never jumps back to where it
+  // was picked up before setting off.
+  let dropped = $state.raw<Map<Card, { x: number; y: number; loc: number }> | null>(null);
 
   const m = $derived(computeMetrics(width, height, reserve));
   const placed = $derived(placeCards(game.view, m));
   const visible = $derived(placed.filter((p) => p !== undefined));
   const dragged = $derived(new Set(drag?.active ? drag.cards : []));
   const idle = $derived(new Set(idleCards(game.view)));
+
+  const hanging = $derived.by(() => {
+    const still = new Map<Card, { x: number; y: number }>();
+    for (const [card, spot] of dropped ?? []) {
+      if (locate(game.view, card).loc === spot.loc) still.set(card, spot);
+    }
+    return still;
+  });
+
+  $effect(() => {
+    if (dropped && hanging.size === 0) dropped = null;
+  });
 
   const wiggling = $derived.by(() => {
     const wiggle = game.wiggle;
@@ -98,6 +114,7 @@
     if (!element) return;
     const card = parseCard(element.dataset.card!);
     game.flush();
+    dropped = null;
     const stack = stackFrom(card);
     if (!stack) return;
     frame.setPointerCapture(event.pointerId);
@@ -124,7 +141,14 @@
     if (!origin) return;
     const half = origin.scale / 2;
     const target = pileAt(m, origin.x + finished.dx + m.cardW * half, origin.y + finished.dy + m.cardH * half);
-    if (target !== null) game.dropCard(finished.card, target);
+    if (target === null) return;
+    const loc = locate(game.state, finished.card).loc;
+    const released = new Map<Card, { x: number; y: number; loc: number }>();
+    for (const card of finished.cards) {
+      const spot = placed[card];
+      if (spot) released.set(card, { x: spot.x + finished.dx, y: spot.y + finished.dy, loc });
+    }
+    if (game.dropCard(finished.card, target)) dropped = released;
   }
 
   function onpointercancel() {
@@ -160,10 +184,11 @@
       {#each visible as p (p.card)}
         <CardView
           card={p.card}
-          x={dragged.has(p.card) ? p.x + drag!.dx : p.x}
-          y={dragged.has(p.card) ? p.y + drag!.dy : p.y}
+          x={dragged.has(p.card) ? p.x + drag!.dx : (hanging.get(p.card)?.x ?? p.x)}
+          y={dragged.has(p.card) ? p.y + drag!.dy : (hanging.get(p.card)?.y ?? p.y)}
           z={p.z}
-          scale={dragged.has(p.card) ? 1 : p.scale}
+          scale={dragged.has(p.card) || hanging.has(p.card) ? 1 : p.scale}
+          hanging={hanging.has(p.card)}
           strip={p.strip}
           index={indexSize(p.strip)}
           dragging={dragged.has(p.card)}

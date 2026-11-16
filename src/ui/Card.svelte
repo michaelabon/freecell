@@ -13,12 +13,14 @@
     /** Font size of the corner rank and suit, in pixels. */
     index: number;
     dragging?: boolean;
+    /** Let go mid-air and waiting for its turn to move. */
+    hanging?: boolean;
     dim?: boolean;
     wiggle?: number;
     sparkle?: boolean;
     glow?: boolean;
   }
-  let { card, x, y, z, scale, strip, index, dragging = false, dim = false, wiggle = 0, sparkle = false, glow = false }: Props = $props();
+  let { card, x, y, z, scale, strip, index, dragging = false, hanging = false, dim = false, wiggle = 0, sparkle = false, glow = false }: Props = $props();
 
   const LIFT_MS = 380;
   let face: HTMLElement;
@@ -56,6 +58,7 @@
   class="card"
   class:red={isRed(card)}
   class:dragging
+  class:hanging
   class:dim
   class:glow
   data-card={cardCode(card)}
@@ -63,7 +66,7 @@
   aria-label="{RANK_NAMES[rankOf(card)]} of {SUIT_NAMES[suitOf(card)]}"
   style:transform="translate3d({x}px, {y}px, 0) scale({scale})"
   style:--index="{index}px"
-  style:z-index={dragging ? 2000 + z : lifted ? 1000 + z : z}
+  style:z-index={dragging ? 2000 + z : lifted ? 1000 + z : hanging ? 900 + z : z}
 >
   <div class="face" bind:this={face}>
     <div class="index">
@@ -120,7 +123,8 @@
   .card.dim .face {
     filter: brightness(0.72) saturate(0.82);
   }
-  .card.dragging .face {
+  .card.dragging .face,
+  .card.hanging .face {
     box-shadow:
       0 0 0 1px var(--card-edge),
       0 10px 22px rgb(0 0 0 / 0.38);

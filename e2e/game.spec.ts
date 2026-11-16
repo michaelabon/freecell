@@ -138,6 +138,31 @@ test('cards can be dragged to a chosen pile', async ({ page }) => {
   expect(codes((await state(page)).cascades[6])).toEqual(['KC']);
 });
 
+test('a dropped stack sets off from where it was let go', async ({ page }) => {
+  await open(page, '?deal=1');
+  await load(page, STACKS);
+  const from = (await card(page, 'JC').boundingBox())!;
+  const target = await topLeft(page, '[data-card="QD"]');
+  const drop = { x: target.x + 18, y: target.y + 40 };
+
+  await page.mouse.move(from.x + from.width / 2, from.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 12, from.y + 20, { steps: 2 });
+  await page.mouse.move(drop.x + from.width / 2, drop.y + 8, { steps: 6 });
+  await page.mouse.up();
+
+  // The 10♥ leaves for a free cell at once; the J♣ waits its turn in mid-air.
+  await page.waitForTimeout(120);
+  const waiting = (await card(page, 'JC').boundingBox())!;
+  expect(Math.abs(waiting.x - drop.x)).toBeLessThan(3);
+  expect(Math.abs(waiting.y - drop.y)).toBeLessThan(3);
+
+  await settled(page);
+  expect(codes((await state(page)).cascades[2])).toEqual(['9D', 'KS', 'QD', 'JC', 'TH']);
+  const landed = (await card(page, 'JC').boundingBox())!;
+  expect(Math.abs(landed.x - target.x)).toBeLessThan(2);
+});
+
 test('a card can be dragged back down off a foundation and then stays put', async ({ page }) => {
   await open(page, '?deal=1');
   await load(page, { cascades: ['KS', 'KH', 'QS', 'JS'], home: ['TS', 'QH', 'KD', 'KC'] });

@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { parseCard } from './cards.ts';
+import { cardCode, parseCard } from './cards.ts';
 import { stateFromLayout } from './notation.ts';
 import {
   CELL0,
@@ -11,6 +11,7 @@ import {
   canMove,
   cloneState,
   hasAnyMove,
+  idleCards,
   isSafeHome,
   isWon,
   locate,
@@ -107,6 +108,15 @@ describe('helpers', () => {
     expect(runLength(state.cascades[0])).toBe(4);
     expect(runLength(state.cascades[1])).toBe(1);
     expect(runLength(state.cascades[2])).toBe(0);
+  });
+
+  it('picks out the buried cards that are no use yet', () => {
+    const state = stateFromLayout({
+      cascades: ['2C 5D QS JH TS', '3H AS 9C 9D', 'KD', ''],
+      cells: ['7S'],
+      home: ['2H'],
+    });
+    expect(idleCards(state).map(cardCode)).toEqual(['2C', '5D', '9C']);
   });
 
   it('detects a dead position', () => {

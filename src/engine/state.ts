@@ -156,6 +156,21 @@ export function runLength(cascade: Card[]): number {
   return length;
 }
 
+/**
+ * Cards with nothing to offer right now: buried in a cascade beneath the run
+ * on top of it, and not the next card any foundation is waiting for.
+ */
+export function idleCards(state: GameState): Card[] {
+  const idle: Card[] = [];
+  for (const cascade of state.cascades) {
+    const buried = cascade.length - runLength(cascade);
+    for (let i = 0; i < buried; i++) {
+      if (!canGoHome(state, cascade[i])) idle.push(cascade[i]);
+    }
+  }
+  return idle;
+}
+
 export function hasAnyMove(state: GameState): boolean {
   if (freeCellCount(state) > 0 || emptyCascadeCount(state) > 0) return !isWon(state);
   for (let from = 0; from < FOUNDATION; from++) {

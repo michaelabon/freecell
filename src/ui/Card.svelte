@@ -10,11 +10,12 @@
     z: number;
     strip: number | null;
     dragging?: boolean;
+    dim?: boolean;
     wiggle?: number;
     sparkle?: boolean;
     glow?: boolean;
   }
-  let { card, x, y, z, strip, dragging = false, wiggle = 0, sparkle = false, glow = false }: Props = $props();
+  let { card, x, y, z, strip, dragging = false, dim = false, wiggle = 0, sparkle = false, glow = false }: Props = $props();
 
   const LIFT_MS = 380;
   let face: HTMLElement;
@@ -52,6 +53,7 @@
   class="card"
   class:red={isRed(card)}
   class:dragging
+  class:dim
   class:glow
   data-card={cardCode(card)}
   role="button"
@@ -107,7 +109,12 @@
     box-shadow:
       0 0 0 1px var(--card-edge),
       0 1px 2px rgb(0 0 0 / 0.25);
-    transition: box-shadow 160ms ease;
+    transition:
+      box-shadow 160ms ease,
+      filter 220ms ease;
+  }
+  .card.dim .face {
+    filter: brightness(0.72) saturate(0.82);
   }
   .card.dragging .face {
     box-shadow:

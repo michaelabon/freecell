@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { type Card, cardCode, parseCard, suitOf } from '../engine/cards.ts';
-  import { CELL0, CELL_COUNT, CASCADE_COUNT, FOUNDATION, locate, runLength } from '../engine/state.ts';
+  import { type Card, parseCard, rankOf, suitOf } from '../engine/cards.ts';
+  import { CELL0, CELL_COUNT, CASCADE_COUNT, FOUNDATION, idleCards, locate, runLength } from '../engine/state.ts';
   import type { Game } from '../game/game.svelte.ts';
   import CardView from './Card.svelte';
   import Suit from './Suit.svelte';
@@ -38,6 +38,7 @@
   const placed = $derived(placeCards(game.view, m));
   const visible = $derived(placed.filter((p) => p !== undefined));
   const dragged = $derived(new Set(drag?.active ? drag.cards : []));
+  const idle = $derived(new Set(idleCards(game.view)));
 
   const wiggling = $derived.by(() => {
     const wiggle = game.wiggle;
@@ -142,8 +143,9 @@
           z={p.z}
           strip={p.strip}
           dragging={dragged.has(p.card)}
+          dim={idle.has(p.card) && game.hintTarget !== p.card}
           wiggle={wiggling.has(p.card) ? game.wiggle!.nonce : 0}
-          sparkle={game.hintTarget === p.card}
+          sparkle={game.hintTarget === p.card || (game.won && rankOf(p.card) === 12)}
           glow={glowing.has(p.card)}
         />
       {/each}

@@ -37,7 +37,7 @@
 
     {#if panel.kind === 'won'}
       <h2>You won!</h2>
-      <p>Deal #{game.dealNumber}, finished in {plural(panel.moves, 'move')}.</p>
+      <p>{game.dealNumber > 0 ? `Deal #${game.dealNumber}, finished` : 'Finished'} in {plural(panel.moves, 'move')}.</p>
       <div class="actions">
         <button class="primary" onclick={() => game.newGame()}>New game</button>
       </div>
@@ -110,6 +110,7 @@
     border-radius: 18px 18px 0 0;
     background: var(--panel);
     color: var(--panel-ink);
+    color-scheme: light;
     box-shadow:
       0 -8px 30px rgb(0 0 0 / 0.35),
       0 0 0 1px rgb(0 0 0 / 0.1);

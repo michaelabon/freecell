@@ -28,7 +28,7 @@ const FOUNDATION_SLOT = [2, 3, 1, 0] as const;
 
 const CARD_RATIO = 1.4;
 const FAN_RATIO = 0.27;
-const MAX_FAN_RATIO = 0.52;
+const MAX_FAN_RATIO = 0.46;
 const MIN_FAN_RATIO = 0.12;
 const ROOMY_CASCADE = 11;
 

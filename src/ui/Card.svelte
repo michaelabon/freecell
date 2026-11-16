@@ -149,8 +149,8 @@
   .emblem {
     position: absolute;
     left: 50%;
-    top: 60%;
-    width: 46%;
+    top: 65%;
+    width: 44%;
     aspect-ratio: 1;
     transform: translate(-50%, -50%);
     opacity: 0.92;

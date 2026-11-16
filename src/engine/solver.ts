@@ -37,7 +37,7 @@ export interface SolveOptions {
 }
 
 export const DEFAULT_OPTIONS: Required<SolveOptions> = {
-  beamWidths: [48, 400, 3000],
+  beamWidths: [48, 400, 3000, 12000],
   quickProofLimit: 4000,
   proofLimit: 400_000,
   maxDepth: 250,

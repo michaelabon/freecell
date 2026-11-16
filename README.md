@@ -57,7 +57,7 @@ pnpm check      # type-check
 pnpm bench 1 32000   # solve a range of deals and report
 ```
 
-The solver agrees with the published result for the 32,000 original deals: every one is winnable except #11982, which it proves lost.
+Run over the 32,000 original deals, the solver wins 31,998, proves #11982 lost (the one deal known to be unwinnable), and gives up on #27978 without an answer. A deal it can't settle is never dealt.
 
 Two URL parameters help when testing by hand: `?deal=N` picks the deal and `?stuckDelay=5` shortens the stuck warning to five seconds.
 

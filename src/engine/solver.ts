@@ -409,14 +409,22 @@ export function solve(start: GameState, options: SolveOptions = {}, weights: Wei
     return null;
   };
 
-  for (let i = 0; i < opts.beamWidths.length; i++) {
-    const beam = beamSearch(root, opts.beamWidths[i], opts.maxDepth, weights, opts.takeBack);
-    explored += beam.explored;
-    if (beam.moves) return { status: 'winnable', moves: [...opening, ...beam.moves], explored };
-    if (i === 0) {
+  // A win that leaves the foundations alone reads as ordinary play, so those
+  // are looked for first. Bringing cards back down is for when nothing else works.
+  const passes: { width: number; takeBack: boolean }[] = [];
+  if (opts.takeBack) for (const width of opts.beamWidths.slice(0, 3)) passes.push({ width, takeBack: false });
+  for (const width of opts.beamWidths) passes.push({ width, takeBack: opts.takeBack });
+
+  let proved = false;
+  for (const pass of passes) {
+    if (pass.takeBack === opts.takeBack && !proved) {
+      proved = true;
       const lost = prove(opts.quickProofLimit);
       if (lost) return lost;
     }
+    const beam = beamSearch(root, pass.width, opts.maxDepth, weights, pass.takeBack);
+    explored += beam.explored;
+    if (beam.moves) return { status: 'winnable', moves: [...opening, ...beam.moves], explored };
   }
   if (!fallback) {
     const lost = prove(opts.proofLimit);

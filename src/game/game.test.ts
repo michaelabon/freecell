@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cardCode, parseCard } from '../engine/cards.ts';
-import { ALMOST_WON, DEAD, LOSING_CARD, NEEDS_TAKE_BACK, ONE_MOVE_FROM_LOST, STACKS } from '../engine/fixtures.ts';
+import {
+  ALMOST_WON,
+  DEAD,
+  LOSING_CARD,
+  NEEDS_TAKE_BACK,
+  ONE_MOVE_FROM_LOST,
+  RESCUE,
+  STACKS,
+} from '../engine/fixtures.ts';
 import { stateFromLayout } from '../engine/notation.ts';
 import { CELL0, FOUNDATION, assertValid, locate } from '../engine/state.ts';
 import { InlineAnalyst } from '../worker/analyse.ts';
@@ -240,7 +248,7 @@ describe('hints', () => {
     await game.start(1);
 
     game.hint();
-    expect(game.panel).toEqual({ kind: 'goal', target: card('AC'), stepCount: 3 });
+    expect(game.panel).toEqual({ kind: 'goal', target: card('AC'), stepCount: 3, takeBacks: 0 });
     expect(game.hintTarget).toBe(card('AC'));
     expect(game.hintMove).toBeNull();
 
@@ -354,6 +362,20 @@ describe('hints', () => {
     }
     expect(game.won).toBe(true);
     expect(broughtBack).toBe(true);
+  });
+
+  it('aims at a card that is new to the foundations, not one it brought down itself', async () => {
+    const game = await loaded(RESCUE);
+    game.hint();
+    const panel = game.panel as { kind: string; target: number; takeBacks: number };
+    expect(panel.kind).toBe('goal');
+    expect(panel.takeBacks).toBeGreaterThan(0);
+    expect(locate(game.state, panel.target).loc).not.toBe(FOUNDATION);
+
+    game.hint();
+    for (let guard = 0; guard < 60 && game.panel?.kind === 'steps'; guard++) game.playHintStep();
+    expect(game.panel).toEqual({ kind: 'achieved', card: panel.target });
+    expect(locate(game.state, panel.target).loc).toBe(FOUNDATION);
   });
 
   it('can be dismissed', async () => {

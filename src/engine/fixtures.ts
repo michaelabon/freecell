@@ -67,3 +67,13 @@ export const NEEDS_TAKE_BACK: Layout = {
   cells: ['2S', '3S', 'QS', 'QH'],
   home: ['5C', 'AD', '4H'],
 };
+
+/**
+ * Lost under the classic rules. The way out brings six cards back down, and
+ * the first card the winning line sends up is one of those six.
+ */
+export const RESCUE: Layout = {
+  cascades: ['9H QH QD 6S 9S JD 7S', '8S', 'TH AD 4S KD', 'TC TD QC 4D', '8H 3S 2D', '5D 9C 8D 7C 6D 5S', '8C 7D', 'JC 9D KH QS JH TS'],
+  cells: ['KC', '3D', 'JS', 'KS'],
+  home: ['6C', '7H', '2S'],
+};

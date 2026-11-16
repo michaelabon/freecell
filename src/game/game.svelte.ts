@@ -67,7 +67,7 @@ export type Panel =
   | { kind: 'achieved'; card: Card }
   | { kind: 'thinking' }
   | { kind: 'unsure'; rollbackMoves: number }
-  | { kind: 'goal'; target: Card; stepCount: number }
+  | { kind: 'goal'; target: Card; stepCount: number; takeBacks: number }
   | { kind: 'steps'; target: Card; steps: Step[]; reasons: (Reason | null)[]; done: number; total: number };
 
 export class Game {
@@ -176,7 +176,10 @@ export class Game {
     if (analysis.status !== 'winnable') return { kind: 'unsure', rollbackMoves: this.#rollbackMoves() };
     const plan = this.plan;
     if (!plan) return { kind: 'thinking' };
-    if (this.#hintLevel === 1) return { kind: 'goal', target: plan.target, stepCount: plan.steps.length };
+    if (this.#hintLevel === 1) {
+      const takeBacks = plan.steps.filter((step) => step.fromHome).length;
+      return { kind: 'goal', target: plan.target, stepCount: plan.steps.length, takeBacks };
+    }
     const total = Math.max(this.#goal?.total ?? 0, plan.steps.length);
     const reasons = stepReasons(this.state, plan.steps);
     return { kind: 'steps', target: plan.target, steps: plan.steps, reasons, done: total - plan.steps.length, total };

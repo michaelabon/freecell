@@ -91,19 +91,31 @@ export function stepMoves(state: GameState, step: Step): Move[] | null {
 }
 
 export interface HintPlan {
-  /** The next card the line of play sends to the foundation. */
+  /** The next card the line of play adds to the foundations. */
   target: Card;
   /** The moves that get it there, ending with the one that sends it up. */
   steps: Step[];
 }
 
+// A line may bring cards down off a foundation and send them up again later.
+// Those round trips are not progress, so the goal is the first card to go up
+// that was never brought down. Held cards mark exactly that, and stay marked,
+// which keeps the goal the same card from the first step of a plan to the last.
 export function buildPlan(start: GameState, steps: Step[]): HintPlan | null {
   const state = cloneState(start);
   for (let i = 0; i < steps.length; i++) {
     const move = resolveStep(state, steps[i]);
     if (!move) return null;
-    if (move.to === FOUNDATION) return { target: steps[i].card, steps: steps.slice(0, i + 1) };
+    const before = state.foundations.slice();
     applySolverMove(state, move);
+    if (move.to !== FOUNDATION) continue;
+    if (!state.held.includes(steps[i].card)) return { target: steps[i].card, steps: steps.slice(0, i + 1) };
+    for (let suit = 0; suit < 4; suit++) {
+      for (let rank = before[suit]; rank < state.foundations[suit]; rank++) {
+        const card = rank * 4 + suit;
+        if (!state.held.includes(card)) return { target: card, steps: steps.slice(0, i + 1) };
+      }
+    }
   }
   return null;
 }

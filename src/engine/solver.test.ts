@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { play } from './actions.ts';
 import { deal } from './deal.ts';
 import { buildPlan, keyAfter, resolveStep, stepMoves, toSteps } from './hint.ts';
-import { NEEDS_TAKE_BACK } from './fixtures.ts';
+import { NEEDS_TAKE_BACK, RESCUE } from './fixtures.ts';
 import { stateFromLayout } from './notation.ts';
 import { canonicalKey, legalMoves, solve } from './solver.ts';
 import { FOUNDATION, HOME0, cloneState, isWon, locate } from './state.ts';
@@ -12,11 +12,12 @@ import { playOut, reachableState } from './testing.ts';
 const dealt = deal;
 
 describe('solve', () => {
-  it('wins the first forty classic deals with moves the game accepts', () => {
+  it('wins the first forty classic deals with moves the game accepts, leaving the foundations alone', () => {
     for (let n = 1; n <= 40; n++) {
       const start = dealt(n);
       const result = solve(start);
       expect(result.status, `deal ${n}`).toBe('winnable');
+      expect(result.moves.some((move) => move.from >= HOME0), `deal ${n}`).toBe(false);
       expect(isWon(playOut(start, toSteps(start, result.moves))), `deal ${n}`).toBe(true);
     }
   });
@@ -98,6 +99,16 @@ describe('hint plans', () => {
     expect(locate(before, plan.target).loc).not.toBe(FOUNDATION);
     const after = playOut(start, plan.steps);
     expect(locate(after, plan.target).loc).toBe(FOUNDATION);
+  });
+
+  it('aims past cards that only went up again after being brought down', () => {
+    const start = stateFromLayout(RESCUE);
+    const steps = toSteps(start, solve(start).moves);
+    const plan = buildPlan(start, steps)!;
+    expect(plan.steps.some((step) => step.fromHome)).toBe(true);
+    expect(locate(start, plan.target).loc).not.toBe(FOUNDATION);
+    expect(locate(playOut(start, plan.steps), plan.target).loc).toBe(FOUNDATION);
+    expect(locate(playOut(start, plan.steps.slice(0, -1)), plan.target).loc).not.toBe(FOUNDATION);
   });
 
   it('recognises a followed step by the position it leads to', () => {

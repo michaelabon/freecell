@@ -112,17 +112,25 @@ export function keyAfter(start: GameState, step: Step): string | null {
   return canonicalKey(state);
 }
 
-export function describeStep(step: Step): string {
-  const label = cardLabel(step.card);
-  const what = step.count > 1 ? `the ${label} and the ${step.count - 1 === 1 ? 'card' : `${step.count - 1} cards`} on it` : `the ${label}`;
+/** A step as prose, with cards left as values so the UI can draw them. */
+export function stepParts(step: Step): (string | Card)[] {
+  const riders = step.count - 1;
+  const stack: (string | Card)[] = ['the ', step.card];
+  if (riders > 0) stack.push(riders === 1 ? ' and the card on it' : ` and the ${riders} cards on it`);
   switch (step.dest.kind) {
     case 'home':
-      return `Send ${what} up to the foundation`;
+      return ['Send ', ...stack, ' up to the foundation'];
     case 'cell':
-      return `Park ${what} in a free cell`;
+      return ['Park ', ...stack, ' in a free cell'];
     case 'empty':
-      return `Move ${what} to an empty column`;
+      return ['Move ', ...stack, ' to an empty column'];
     case 'onto':
-      return `Move ${what} onto the ${cardLabel(step.dest.card)}`;
+      return ['Move ', ...stack, ' onto the ', step.dest.card];
   }
+}
+
+export function describeStep(step: Step): string {
+  return stepParts(step)
+    .map((part) => (typeof part === 'string' ? part : cardLabel(part)))
+    .join('');
 }

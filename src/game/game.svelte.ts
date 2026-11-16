@@ -1,4 +1,4 @@
-import { type Refusal, explain, play, resolveClick, resolveDrop } from '../engine/actions.ts';
+import { type Played, type Refusal, explain, play, resolveClick, resolveDrop } from '../engine/actions.ts';
 import type { Card } from '../engine/cards.ts';
 import { deal, randomDealNumber } from '../engine/deal.ts';
 import { type HintPlan, type Step, buildPlan, keyAfter, resolveStep, stepMoves } from '../engine/hint.ts';
@@ -28,8 +28,11 @@ export interface GameOptions {
   storage?: Store | null;
   /** How long the player may sit in a lost position before being told. */
   stuckDelayMs?: number;
-  /** Gap between the single-card moves of one action; 0 shows them all at once. */
+  /** Gap between the single-card moves of one action; 0 shows everything at once. */
   stepMs?: number;
+  /** Pause before the first card goes home by itself, and between the ones after it. */
+  autoFirstMs?: number;
+  autoNextMs?: number;
   random?: () => number;
   now?: () => number;
 }
@@ -79,10 +82,12 @@ export class Game {
   #storage: Store | null;
   #stuckDelayMs: number;
   #stepMs: number;
+  #autoFirstMs: number;
+  #autoNextMs: number;
   #random: () => number;
   #now: () => number;
 
-  #queue: Move[] = [];
+  #queue: { move: Move; wait: number }[] = [];
   #ticker: ReturnType<typeof setTimeout> | null = null;
   #stuckTimer: ReturnType<typeof setTimeout> | null = null;
   #achievedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -95,7 +100,9 @@ export class Game {
     this.#analyst = options.analyst;
     this.#storage = options.storage ?? null;
     this.#stuckDelayMs = options.stuckDelayMs ?? 90_000;
-    this.#stepMs = options.stepMs ?? 70;
+    this.#stepMs = options.stepMs ?? 250;
+    this.#autoFirstMs = options.autoFirstMs ?? 250;
+    this.#autoNextMs = options.autoNextMs ?? 300;
     this.#random = options.random ?? Math.random;
     this.#now = options.now ?? Date.now;
   }
@@ -199,7 +206,7 @@ export class Game {
       const analysis = await this.#analyst.analyse(opening.state);
       if (epoch !== this.#epoch) return;
       if (analysis.status === 'winnable') {
-        this.#begin(number, raw, opening.state, opening.moves, analysis);
+        this.#begin(number, raw, opening, analysis);
         return;
       }
       if (dealNumber !== undefined) {
@@ -221,10 +228,11 @@ export class Game {
     const opening = play(start, []);
     const analysis = await this.#analyst.analyse(opening.state);
     if (epoch !== this.#epoch) return;
-    this.#begin(0, start, opening.state, opening.moves, analysis);
+    this.#begin(0, start, opening, analysis);
   }
 
-  #begin(dealNumber: number, raw: GameState, state: GameState, opening: Move[], analysis: Analysis): void {
+  #begin(dealNumber: number, raw: GameState, opening: Played, analysis: Analysis): void {
+    const state = opening.state;
     this.flush();
     this.#clearTransient();
     this.#hintLevel = 0;
@@ -302,7 +310,7 @@ export class Game {
 
     this.#positions = [...this.#positions.slice(0, this.#cursor + 1), position];
     this.#cursor++;
-    this.#animate(result.moves);
+    this.#animate(result);
     this.#moved();
   }
 
@@ -374,26 +382,36 @@ export class Game {
     this.#analyst.dispose();
   }
 
-  #animate(moves: Move[]): void {
+  // Cards going home by themselves are paced apart from the player's own
+  // move, so it reads as the game answering rather than as part of the move.
+  #animate({ moves, autoFrom }: Played): void {
     if (moves.length === 0) return;
     if (this.#stepMs <= 0) {
       this.view = this.state;
       return;
     }
-    this.#queue.push(...moves);
-    if (!this.#ticker) this.#tick();
+    moves.forEach((move, i) => {
+      const wait = i < autoFrom ? (i === 0 ? 0 : this.#stepMs) : i === autoFrom ? this.#autoFirstMs : this.#autoNextMs;
+      this.#queue.push({ move, wait });
+    });
+    if (!this.#ticker) this.#schedule();
+  }
+
+  #schedule(): void {
+    const next = this.#queue[0];
+    if (!next) return;
+    if (next.wait <= 0) this.#tick();
+    else this.#ticker = setTimeout(this.#tick, next.wait);
   }
 
   #tick = (): void => {
     this.#ticker = null;
-    const move = this.#queue.shift();
-    if (!move) return;
-    const next = cloneState(this.view);
-    applyMove(next, move);
-    this.view = next;
-    if (this.#queue.length > 0) {
-      this.#ticker = setTimeout(this.#tick, this.#queue.length > 12 ? this.#stepMs / 2 : this.#stepMs);
-    }
+    const next = this.#queue.shift();
+    if (!next) return;
+    const view = cloneState(this.view);
+    applyMove(view, next.move);
+    this.view = view;
+    this.#schedule();
   };
 
   #clearTransient(): void {

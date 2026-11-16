@@ -145,6 +145,23 @@ describe('moving cards', () => {
     expect(game.view).toEqual(game.state);
   });
 
+  it('pauses before sending cards home, and between each one', async () => {
+    const game = await loaded(ALMOST_WON, { stepMs: 50, autoFirstMs: 250, autoNextMs: 300 });
+    game.clickCard(card('KS'));
+    expect(game.won).toBe(true);
+    expect(game.view.cascades.map((c) => c.map(cardCode))).toContainEqual(['QS']);
+    expect(game.view.foundations[3]).toBe(11);
+
+    await vi.advanceTimersByTimeAsync(249);
+    expect(game.view.foundations[3]).toBe(11);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(game.view.foundations[3]).toBe(12);
+    await vi.advanceTimersByTimeAsync(299);
+    expect(game.view.foundations[3]).toBe(12);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(game.view).toEqual(game.state);
+  });
+
   it('wiggles on a refused move and explains only when asked twice', async () => {
     const game = await loaded(STACKS);
     expect(game.clickCard(card('QS'))).toBe(false);

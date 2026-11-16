@@ -127,11 +127,19 @@ export function resolveDrop(state: GameState, card: Card, to: number): Attempt {
   return moves ? accept(moves) : refuse(noRoom(state, card, count, to));
 }
 
+export interface Played {
+  state: GameState;
+  /** The player's moves followed by the cards that went home by themselves. */
+  moves: Move[];
+  /** Index in `moves` of the first card that went home by itself. */
+  autoFrom: number;
+}
+
 /** Applies a player's moves to a copy of the state, then sends every safe card home. */
-export function play(state: GameState, moves: Move[]): { state: GameState; moves: Move[] } {
+export function play(state: GameState, moves: Move[]): Played {
   const next = cloneState(state);
   for (const move of moves) applyMove(next, move);
-  return { state: next, moves: [...moves, ...autoHome(next)] };
+  return { state: next, moves: [...moves, ...autoHome(next)], autoFrom: moves.length };
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;

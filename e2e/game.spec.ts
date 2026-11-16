@@ -28,10 +28,17 @@ async function open(page: Page, query = ''): Promise<void> {
   await page.waitForFunction(() => window.freecell?.ready);
 }
 
-/** Waits for the moves of the last action to finish playing out on screen. */
+/** Waits for the moves of the last action to finish playing out and for the cards to stop moving. */
 async function settled(page: Page): Promise<void> {
   await page.waitForFunction(() => JSON.stringify(window.freecell.view) === JSON.stringify(window.freecell.state));
-  await page.waitForTimeout(60);
+  await page.waitForFunction(
+    () =>
+      new Promise<boolean>((resolve) => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => resolve(!document.getAnimations().some((a) => a instanceof CSSTransition))),
+        );
+      }),
+  );
 }
 
 async function load(page: Page, layout: Layout): Promise<void> {

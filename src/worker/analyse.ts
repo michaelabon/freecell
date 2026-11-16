@@ -1,7 +1,7 @@
 import { type Step, toSteps } from '../engine/hint.ts';
 import { refineLine } from '../engine/refine.ts';
 import { type SolveOptions, solve } from '../engine/solver.ts';
-import { type GameState, autoHome, cloneState } from '../engine/state.ts';
+import type { GameState } from '../engine/state.ts';
 import type { Analysis, Analyst } from './protocol.ts';
 
 // Refining a plan asks "is it still winnable if I do this instead?" several
@@ -14,11 +14,9 @@ function quickLine(state: GameState): Step[] | null {
 }
 
 export function analysePosition(state: GameState, options?: SolveOptions): Analysis {
-  const root = cloneState(state);
-  autoHome(root);
-  const result = solve(root, options);
+  const result = solve(state, options);
   if (result.status !== 'winnable') return { status: result.status, steps: [], planLength: 0, explored: result.explored };
-  const refined = refineLine(root, toSteps(root, result.moves), quickLine);
+  const refined = refineLine(state, toSteps(state, result.moves), quickLine);
   return { status: 'winnable', ...refined, explored: result.explored };
 }
 

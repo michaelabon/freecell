@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseCard } from './cards.ts';
 import { type Attempt, explain, play, resolveClick, resolveDrop } from './actions.ts';
 import { stateFromLayout } from './notation.ts';
-import { CELL0, FOUNDATION, isWon } from './state.ts';
+import { CELL0, FOUNDATION, HOME0, isWon } from './state.ts';
 
 const card = parseCard;
 
@@ -128,8 +128,38 @@ describe('resolveDrop', () => {
   });
 });
 
+describe('taking a card back off a foundation', () => {
+  const state = stateFromLayout({ cascades: ['6S', '9D', ''], cells: [''], home: ['5H'] });
+
+  it('takes a drag onto a column that accepts the card', () => {
+    expect(moves(resolveDrop(state, card('5H'), 0))).toEqual([{ from: HOME0 + 2, to: 0 }]);
+    expect(moves(resolveDrop(state, card('5H'), 2))).toEqual([{ from: HOME0 + 2, to: 2 }]);
+  });
+
+  it('explains the drops it refuses', () => {
+    expect(refusal(resolveDrop(state, card('5H'), 1))).toBe("The 5♥ can't go on the 9♦. It needs a black 6.");
+    expect(refusal(resolveDrop(state, card('5H'), CELL0))).toBe(
+      'A card from the foundation can only come back down onto a column.',
+    );
+    expect(refusal(resolveDrop(state, card('4H'), 0))).toBe(
+      'Only the top card of a foundation can come back down, and the 4♥ is under others.',
+    );
+  });
+
+  it('never happens on a click', () => {
+    expect(resolveClick(state, card('5H'))).toEqual({ ok: false, refusal: { kind: 'ignored' } });
+  });
+
+  it('keeps the card from going up by itself afterwards', () => {
+    const back = stateFromLayout({ cascades: ['6S', '4H 3H'], home: ['2H'], held: ['4H'] });
+    const result = play(back, [{ from: 1, to: FOUNDATION }]);
+    expect(result.state.foundations[2]).toBe(3);
+    expect(result.state.cascades[1]).toEqual([card('4H')]);
+  });
+});
+
 describe('play', () => {
-  it('sends newly safe cards home after the move', () => {
+  it('sends up everything a card going home sets off', () => {
     const state = stateFromLayout({
       cascades: ['KS QS JS TS 9S 8S 7S 6S 5S 4S 3S 2S', 'KH QH JH TH 9H 8H 7H 6H 5H 4H 3H 2H AS'],
       home: ['AH', 'KD', 'KC'],
@@ -138,5 +168,12 @@ describe('play', () => {
     expect(isWon(result.state)).toBe(true);
     expect(result.moves).toHaveLength(25);
     expect(state.cascades[1]).toHaveLength(13);
+  });
+
+  it('sends nothing up when no card went home', () => {
+    const state = stateFromLayout({ cascades: ['AS', '9D'] });
+    const result = play(state, [{ from: 1, to: CELL0 }]);
+    expect(result.moves).toHaveLength(1);
+    expect(result.state.foundations).toEqual([0, 0, 0, 0]);
   });
 });

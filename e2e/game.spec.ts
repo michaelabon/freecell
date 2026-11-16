@@ -138,6 +138,27 @@ test('cards can be dragged to a chosen pile', async ({ page }) => {
   expect(codes((await state(page)).cascades[6])).toEqual(['KC']);
 });
 
+test('a card can be dragged back down off a foundation and then stays put', async ({ page }) => {
+  await open(page, '?deal=1');
+  await load(page, { cascades: ['KS', 'KH', 'QS', 'JS'], home: ['TS', 'QH', 'KD', 'KC'] });
+
+  await dragOnto(page, 'QH', await topLeft(page, '[data-card="KS"]'));
+  await dragOnto(page, 'JH', await topLeft(page, '[data-card="QS"]'));
+  let now = await state(page);
+  expect(codes(now.held)).toEqual(['QH', 'JH']);
+  expect(codes(now.cascades[0])).toEqual(['KS', 'QH']);
+
+  await clickCard(page, 'JH');
+  now = await state(page);
+  expect(now.foundations[2]).toBe(11);
+  expect(codes(now.cascades[0])).toEqual(['KS', 'QH']);
+});
+
+test('nothing goes up by itself at the deal', async ({ page }) => {
+  await open(page, '?deal=2');
+  expect((await state(page)).foundations).toEqual([0, 0, 0, 0]);
+});
+
 test('hints lead all the way to a win', async ({ page }) => {
   await open(page, '?deal=1');
   let steps = 0;
@@ -152,6 +173,7 @@ test('hints lead all the way to a win', async ({ page }) => {
     const head = await page.evaluate(() => {
       const { state, hintMove } = window.freecell;
       if (!hintMove) return null;
+      if (hintMove.from >= 13) return (state.foundations[hintMove.from - 13] - 1) * 4 + (hintMove.from - 13);
       if (hintMove.from >= 8) return state.cells[hintMove.from - 8];
       const cascade = state.cascades[hintMove.from];
       return cascade[cascade.length - hintMove.count];

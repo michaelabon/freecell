@@ -46,8 +46,24 @@ export const DEAD: Layout = {
   cells: ['6S', '6H', '6D', '6C'],
 };
 
-/** One move from a win: the K♠ has to step aside for the Q♠. */
+/** Two moves from a win: the K♠ steps aside, then the Q♠ goes up and takes the K♠ with it. */
 export const ALMOST_WON: Layout = {
   cascades: ['QS KS'],
   home: ['JS', 'KH', 'KD', 'KC'],
+};
+
+/** Lost under the classic rules, but winnable by bringing a card back down off a foundation. */
+export const NEEDS_TAKE_BACK: Layout = {
+  cascades: [
+    '6C 8H JC 6H KD',
+    '5H 7S TC 7D 8S 7H',
+    '9H 4D 9S TD JD 6D KS QD',
+    'KC 8C 5D',
+    'QC 2D AS JS 9C 8D 7C',
+    '5S',
+    '6S 4S 3D JH TS 9D',
+    'KH TH',
+  ],
+  cells: ['2S', '3S', 'QS', 'QH'],
+  home: ['5C', 'AD', '4H'],
 };

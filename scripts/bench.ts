@@ -1,6 +1,6 @@
 import { deal } from '../src/engine/deal.ts';
 import { DEFAULT_OPTIONS, applySolverMove, legalMoves, solve } from '../src/engine/solver.ts';
-import { autoHome, cloneState, isWon } from '../src/engine/state.ts';
+import { cloneState, isWon } from '../src/engine/state.ts';
 
 const [first = '1', last = '200'] = process.argv.slice(2);
 const widths = process.env.WIDTHS ? process.env.WIDTHS.split(',').map(Number) : DEFAULT_OPTIONS.beamWidths;
@@ -22,7 +22,6 @@ for (let n = Number(first); n <= Number(last); n++) {
     continue;
   }
   const state = cloneState(start);
-  autoHome(state);
   for (const move of result.moves) {
     const legal = legalMoves(state).some((m) => m.from === move.from && m.to === move.to && m.count === move.count);
     if (!legal) throw new Error(`Deal ${n}: solver returned an illegal move`);

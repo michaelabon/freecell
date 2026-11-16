@@ -7,6 +7,7 @@ export interface Layout {
   cells?: string[];
   /** Top card home per suit, such as ["3C", "AD"]. */
   home?: string[];
+  held?: string[];
 }
 
 export function stateFromLayout(layout: Layout): GameState {
@@ -21,6 +22,7 @@ export function stateFromLayout(layout: Layout): GameState {
     const card = parseCard(code);
     state.foundations[card & 3] = (card >> 2) + 1;
   }
+  state.held = (layout.held ?? []).map(parseCard);
   return state;
 }
 

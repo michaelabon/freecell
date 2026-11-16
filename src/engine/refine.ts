@@ -3,7 +3,7 @@ import { type Card, rankOf, suitOf } from './cards.ts';
 import { type Destination, type Step, buildPlan, resolveStep } from './hint.ts';
 import { type SolverMove, applySolverMove, canonicalKey } from './solver.ts';
 import { capacityFor } from './stackMove.ts';
-import { CELL0, FOUNDATION, type GameState, cloneState, isCascade, isWon, locate, runLength } from './state.ts';
+import { CELL0, FOUNDATION, type GameState, cloneState, isCascade, isCell, isWon, locate, runLength } from './state.ts';
 
 /** Finds a winning line from a position, or null when none turns up quickly. */
 export type LineFinder = (state: GameState) => Step[] | null;
@@ -78,7 +78,7 @@ function follows(state: GameState, previous: Trace, step: Step): boolean {
   if (isCascade(previous.from) && move.from === previous.from) return true;
   if (step.dest.kind === 'onto' && (step.dest.card === previous.top || step.dest.card === previous.uncovered)) return true;
   if (previous.emptied && step.dest.kind === 'empty') return true;
-  return !isCascade(previous.from) && step.dest.kind === 'cell';
+  return isCell(previous.from) && step.dest.kind === 'cell';
 }
 
 /**

@@ -5,15 +5,23 @@ import {
   CELL_COUNT,
   FOUNDATION,
   type GameState,
-  autoHome,
+  HOME0,
+  applyMove,
   canGoHome,
+  chainHome,
   cloneState,
+  isSafeHome,
+  isUnneeded,
   isWon,
   runLength,
+  sourceCard,
 } from './state.ts';
 import { stackCapacity } from './stackMove.ts';
 
-/** One player-level move: `count` cards from the top of `from` onto `to`. */
+/**
+ * One player-level move: `count` cards from the top of `from` onto `to`.
+ * `from` may also be a foundation (HOME0 + suit), taking its top card back.
+ */
 export interface SolverMove {
   from: number;
   to: number;
@@ -34,6 +42,8 @@ export interface SolveOptions {
   quickProofLimit?: number;
   proofLimit?: number;
   maxDepth?: number;
+  /** Whether lines of play may take cards back off the foundations. */
+  takeBack?: boolean;
 }
 
 export const DEFAULT_OPTIONS: Required<SolveOptions> = {
@@ -41,9 +51,10 @@ export const DEFAULT_OPTIONS: Required<SolveOptions> = {
   quickProofLimit: 4000,
   proofLimit: 400_000,
   maxDepth: 250,
+  takeBack: true,
 };
 
-export function legalMoves(state: GameState): SolverMove[] {
+export function legalMoves(state: GameState, takeBack = true): SolverMove[] {
   const moves: SolverMove[] = [];
   let freeCells = 0;
   let firstCell = -1;
@@ -96,35 +107,85 @@ export function legalMoves(state: GameState): SolverMove[] {
     }
     if (firstEmpty >= 0) moves.push({ from, to: firstEmpty, count: 1 });
   }
+
+  // A card is only worth taking back off a foundation to give a lower card
+  // somewhere to sit, which rules out any card that nothing could need.
+  for (let suit = 0; takeBack && suit < 4; suit++) {
+    const count = state.foundations[suit];
+    if (count === 0) continue;
+    const card = (count - 1) * 4 + suit;
+    if (isUnneeded(state, card)) continue;
+    const from = HOME0 + suit;
+    for (let to = 0; to < CASCADE_COUNT; to++) {
+      const target = state.cascades[to];
+      if (target.length > 0 && canStack(card, target[target.length - 1])) moves.push({ from, to, count: 1 });
+    }
+    if (firstEmpty >= 0) moves.push({ from, to: firstEmpty, count: 1 });
+  }
   return moves;
 }
 
-/** Mutates `state` with the bare move, leaving safe cards where they are. */
+/** Mutates `state` with the bare move, without the cards a trip home sets off. */
 export function applyStackMove(state: GameState, move: SolverMove): void {
-  if (move.from < CELL0) {
+  if (move.from < CELL0 && move.to < CELL0) {
     const source = state.cascades[move.from];
-    if (move.to < CELL0) {
-      const target = state.cascades[move.to];
-      const start = source.length - move.count;
-      for (let i = start; i < source.length; i++) target.push(source[i]);
-      source.length = start;
-    } else {
-      const card = source.pop()!;
-      if (move.to === FOUNDATION) state.foundations[card & 3]++;
-      else state.cells[move.to - CELL0] = card;
-    }
+    const target = state.cascades[move.to];
+    const start = source.length - move.count;
+    for (let i = start; i < source.length; i++) target.push(source[i]);
+    source.length = start;
   } else {
-    const card = state.cells[move.from - CELL0]!;
-    state.cells[move.from - CELL0] = null;
-    if (move.to === FOUNDATION) state.foundations[card & 3]++;
-    else state.cascades[move.to].push(card);
+    applyMove(state, move);
   }
 }
 
-/** Mutates `state`: makes the move, then sends every safe card home as the game does. */
+/** Mutates `state` exactly as the game does when the player makes this move. */
 export function applySolverMove(state: GameState, move: SolverMove): void {
-  applyStackMove(state, move);
-  autoHome(state);
+  if (move.to === FOUNDATION) {
+    const card = sourceCard(state, move.from)!;
+    applyMove(state, move);
+    chainHome(state, card, move.from);
+  } else {
+    applyStackMove(state, move);
+  }
+}
+
+// Sending up a card that nothing could need is never a mistake, provided the
+// cards it takes with it are the same kind. Treating that as the only move
+// worth considering keeps the search from branching on when to do it.
+function forcedHome(state: GameState): SolverMove | null {
+  for (let from = 0; from < FOUNDATION; from++) {
+    const card = sourceCard(state, from);
+    if (card === null || !isSafeHome(state, card)) continue;
+    const trial = cloneState(state);
+    applyMove(trial, { from, to: FOUNDATION });
+    const replay = cloneState(trial);
+    let harmless = true;
+    for (const follow of chainHome(trial, card, from)) {
+      if (!isUnneeded(replay, sourceCard(replay, follow.from)!)) {
+        harmless = false;
+        break;
+      }
+      applyMove(replay, follow);
+    }
+    if (harmless) return { from, to: FOUNDATION, count: 1 };
+  }
+  return null;
+}
+
+/** Mutates `state`, making every forced trip home, and returns those moves. */
+function settle(state: GameState): SolverMove[] {
+  const made: SolverMove[] = [];
+  for (let move = forcedHome(state); move; move = forcedHome(state)) {
+    applySolverMove(state, move);
+    made.push(move);
+  }
+  return made;
+}
+
+/** Mutates `state` with a move and whatever is forced after it; returns all of them. */
+function advance(state: GameState, move: SolverMove): SolverMove[] {
+  applySolverMove(state, move);
+  return [move, ...settle(state)];
 }
 
 /**
@@ -137,7 +198,11 @@ export function canonicalKey(state: GameState): string {
   const cells: number[] = [];
   for (const cell of state.cells) if (cell !== null) cells.push(cell + 48);
   cells.sort((a, b) => a - b);
-  return `${piles.join('/')}|${String.fromCharCode(...cells)}`;
+  let key = `${piles.join('/')}|${String.fromCharCode(...cells)}`;
+  // A held card only behaves differently while it is in play.
+  const held = state.held.filter((card) => (card >> 2) >= state.foundations[card & 3]);
+  if (held.length > 0) key += `|${String.fromCharCode(...held.sort((a, b) => a - b).map((card) => card + 48))}`;
+  return key;
 }
 
 // Order-independent across cascades and cells for the same reason as
@@ -173,6 +238,11 @@ function hashState(state: GameState): number {
     y ^= y >>> 13;
     a = (a + Math.imul(x, 0x85ebca6b)) | 0;
     b = (b + Math.imul(y, 0x846ca68b)) | 0;
+  }
+  for (const card of state.held) {
+    if ((card >> 2) < state.foundations[card & 3]) continue;
+    a = (a + Math.imul(card + 211, 0x27d4eb2f)) | 0;
+    b = (b + Math.imul(card + 307, 0x165667b1)) | 0;
   }
   return (a >>> 0) * 2097152 + (b >>> 11);
 }
@@ -227,9 +297,15 @@ interface BeamOutcome {
   explored: number;
 }
 
-function beamSearch(start: GameState, width: number, maxDepth: number, weights: Weights): BeamOutcome {
+function beamSearch(
+  start: GameState,
+  width: number,
+  maxDepth: number,
+  weights: Weights,
+  takeBack: boolean,
+): BeamOutcome {
   const parents: number[] = [-1];
-  const via: (SolverMove | null)[] = [null];
+  const via: SolverMove[][] = [[]];
   let level: { state: GameState; node: number }[] = [{ state: start, node: 0 }];
   const seen = new Set<number>([hashState(start)]);
   let explored = 0;
@@ -238,19 +314,19 @@ function beamSearch(start: GameState, width: number, maxDepth: number, weights: 
     const next: { state: GameState; node: number; score: number }[] = [];
     for (const { state, node } of level) {
       explored++;
-      for (const move of legalMoves(state)) {
+      for (const move of legalMoves(state, takeBack)) {
         const child = cloneState(state);
-        applySolverMove(child, move);
+        const made = advance(child, move);
         if (isWon(child)) {
-          const moves = [move];
-          for (let n = node; parents[n] >= 0; n = parents[n]) moves.push(via[n]!);
-          return { moves: moves.reverse(), explored };
+          const path = [made];
+          for (let n = node; parents[n] >= 0; n = parents[n]) path.push(via[n]);
+          return { moves: path.reverse().flat(), explored };
         }
         const hash = hashState(child);
         if (seen.has(hash)) continue;
         seen.add(hash);
         parents.push(node);
-        via.push(move);
+        via.push(made);
         next.push({ state: child, node: parents.length - 1, score: evaluate(child, weights) });
       }
     }
@@ -271,16 +347,16 @@ interface ProofOutcome {
 
 // Depth-first over every reachable position with exact keys, so running out
 // of positions is a proof that the game is lost rather than a guess.
-function exhaust(start: GameState, limit: number, weights: Weights): ProofOutcome {
+function exhaust(start: GameState, limit: number, weights: Weights, takeBack: boolean): ProofOutcome {
   interface Frame {
-    children: { state: GameState; move: SolverMove; score: number }[];
+    children: { state: GameState; made: SolverMove[]; score: number }[];
     next: number;
   }
   const expand = (state: GameState): Frame => {
-    const children = legalMoves(state).map((move) => {
+    const children = legalMoves(state, takeBack).map((move) => {
       const child = cloneState(state);
-      applySolverMove(child, move);
-      return { state: child, move, score: evaluate(child, weights) };
+      const made = advance(child, move);
+      return { state: child, made, score: evaluate(child, weights) };
     });
     children.sort((p, q) => p.score - q.score);
     return { children, next: 0 };
@@ -288,7 +364,7 @@ function exhaust(start: GameState, limit: number, weights: Weights): ProofOutcom
 
   const seen = new Set<string>([canonicalKey(start)]);
   const stack: Frame[] = [expand(start)];
-  const path: SolverMove[] = [];
+  const path: SolverMove[][] = [];
   let explored = 1;
 
   while (stack.length > 0) {
@@ -298,14 +374,14 @@ function exhaust(start: GameState, limit: number, weights: Weights): ProofOutcom
       path.pop();
       continue;
     }
-    const { state, move } = frame.children[frame.next++];
-    if (isWon(state)) return { status: 'winnable', moves: [...path, move], explored };
+    const { state, made } = frame.children[frame.next++];
+    if (isWon(state)) return { status: 'winnable', moves: [...path, made].flat(), explored };
     const key = canonicalKey(state);
     if (seen.has(key)) continue;
     if (explored >= limit) return { status: 'unknown', moves: [], explored };
     seen.add(key);
     explored++;
-    path.push(move);
+    path.push(made);
     stack.push(expand(state));
   }
   return { status: 'unwinnable', moves: [], explored };
@@ -319,14 +395,14 @@ function exhaust(start: GameState, limit: number, weights: Weights): ProofOutcom
 export function solve(start: GameState, options: SolveOptions = {}, weights: Weights = DEFAULT_WEIGHTS): SolveResult {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const root = cloneState(start);
-  autoHome(root);
-  if (isWon(root)) return { status: 'winnable', moves: [], explored: 0 };
+  const opening = settle(root);
+  if (isWon(root)) return { status: 'winnable', moves: opening, explored: 0 };
 
   let explored = 0;
   let fallback: SolverMove[] | null = null;
   const prove = (limit: number): SolveResult | null => {
     if (limit <= 0) return null;
-    const proof = exhaust(root, limit, weights);
+    const proof = exhaust(root, limit, weights, opts.takeBack);
     explored += proof.explored;
     if (proof.status === 'unwinnable') return { status: 'unwinnable', moves: [], explored };
     if (proof.status === 'winnable') fallback = proof.moves;
@@ -334,9 +410,9 @@ export function solve(start: GameState, options: SolveOptions = {}, weights: Wei
   };
 
   for (let i = 0; i < opts.beamWidths.length; i++) {
-    const beam = beamSearch(root, opts.beamWidths[i], opts.maxDepth, weights);
+    const beam = beamSearch(root, opts.beamWidths[i], opts.maxDepth, weights, opts.takeBack);
     explored += beam.explored;
-    if (beam.moves) return { status: 'winnable', moves: beam.moves, explored };
+    if (beam.moves) return { status: 'winnable', moves: [...opening, ...beam.moves], explored };
     if (i === 0) {
       const lost = prove(opts.quickProofLimit);
       if (lost) return lost;
@@ -347,6 +423,6 @@ export function solve(start: GameState, options: SolveOptions = {}, weights: Wei
     if (lost) return lost;
   }
   return fallback
-    ? { status: 'winnable', moves: fallback, explored }
+    ? { status: 'winnable', moves: [...opening, ...(fallback as SolverMove[])], explored }
     : { status: 'unknown', moves: [], explored };
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cardCode, parseCard } from '../engine/cards.ts';
-import { ALMOST_WON, DEAD, LOSING_CARD, ONE_MOVE_FROM_LOST, STACKS } from '../engine/fixtures.ts';
+import { ALMOST_WON, DEAD, LOSING_CARD, NEEDS_TAKE_BACK, ONE_MOVE_FROM_LOST, STACKS } from '../engine/fixtures.ts';
 import { stateFromLayout } from '../engine/notation.ts';
 import { CELL0, FOUNDATION, assertValid, locate } from '../engine/state.ts';
 import { InlineAnalyst } from '../worker/analyse.ts';
@@ -145,21 +145,51 @@ describe('moving cards', () => {
     expect(game.view).toEqual(game.state);
   });
 
-  it('pauses before sending cards home, and between each one', async () => {
-    const game = await loaded(ALMOST_WON, { stepMs: 50, autoFirstMs: 250, autoNextMs: 300 });
-    game.clickCard(card('KS'));
+  it('pauses before the cards that follow one home, and between each of them', async () => {
+    const game = await loaded(
+      { cascades: ['KS QS JS TS 9S 8S 7S 6S 5S', '4S', '3S'], home: ['2S', 'KH', 'KD', 'KC'] },
+      { stepMs: 50, autoFirstMs: 250, autoNextMs: 300 },
+    );
+    game.clickCard(card('3S'));
     expect(game.won).toBe(true);
-    expect(game.view.cascades.map((c) => c.map(cardCode))).toContainEqual(['QS']);
-    expect(game.view.foundations[3]).toBe(11);
+    expect(game.view.foundations[3]).toBe(3);
 
     await vi.advanceTimersByTimeAsync(249);
-    expect(game.view.foundations[3]).toBe(11);
+    expect(game.view.foundations[3]).toBe(3);
     await vi.advanceTimersByTimeAsync(1);
-    expect(game.view.foundations[3]).toBe(12);
+    expect(game.view.foundations[3]).toBe(4);
     await vi.advanceTimersByTimeAsync(299);
-    expect(game.view.foundations[3]).toBe(12);
+    expect(game.view.foundations[3]).toBe(4);
     await vi.advanceTimersByTimeAsync(1);
+    expect(game.view.foundations[3]).toBe(5);
+    await vi.advanceTimersByTimeAsync(3000);
     expect(game.view).toEqual(game.state);
+  });
+
+  it('sends nothing up at the deal', async () => {
+    const game = makeGame();
+    await game.start(2);
+    expect(game.state.foundations).toEqual([0, 0, 0, 0]);
+    expect(game.state.cascades.some((cascade) => cascade.at(-1)! >> 2 === 0)).toBe(true);
+  });
+
+  it('lets a card come back down off a foundation, and leaves it alone afterwards', async () => {
+    const game = await loaded({ cascades: ['KS', 'KH', 'QS', 'JS'], home: ['TS', 'QH', 'KD', 'KC'] });
+    expect(game.clickCard(card('QH'))).toBe(false);
+    expect(game.moveCount).toBe(0);
+
+    expect(game.dropCard(card('QH'), 0)).toBe(true);
+    expect(game.dropCard(card('JH'), 2)).toBe(true);
+    expect(game.state.held).toEqual([card('QH'), card('JH')]);
+    expect(game.state.foundations[2]).toBe(10);
+
+    game.clickCard(card('JH'));
+    expect(game.state.foundations[2]).toBe(11);
+    expect(game.state.cascades[0]).toEqual([card('KS'), card('QH')]);
+
+    game.restart();
+    expect(game.state.held).toEqual([]);
+    expect(game.state.foundations[2]).toBe(12);
   });
 
   it('wiggles on a refused move and explains only when asked twice', async () => {
@@ -195,10 +225,11 @@ describe('moving cards', () => {
 
   it('declares the win', async () => {
     const game = await loaded(ALMOST_WON);
-    expect(game.won).toBe(false);
     game.clickCard(card('KS'));
+    expect(game.won).toBe(false);
+    game.clickCard(card('QS'));
     expect(game.won).toBe(true);
-    expect(game.panel).toEqual({ kind: 'won', moves: 1 });
+    expect(game.panel).toEqual({ kind: 'won', moves: 2 });
     expect(game.clickCard(card('KS'))).toBe(false);
   });
 });
@@ -209,19 +240,23 @@ describe('hints', () => {
     await game.start(1);
 
     game.hint();
-    expect(game.panel).toEqual({ kind: 'goal', target: card('AC'), stepCount: 2 });
+    expect(game.panel).toEqual({ kind: 'goal', target: card('AC'), stepCount: 3 });
     expect(game.hintTarget).toBe(card('AC'));
     expect(game.hintMove).toBeNull();
 
     game.hint();
-    expect(game.panel).toMatchObject({ kind: 'steps', target: card('AC'), done: 0, total: 2 });
+    expect(game.panel).toMatchObject({ kind: 'steps', target: card('AC'), done: 0, total: 3 });
     expect(game.hintMove).toEqual({ from: 5, to: CELL0, count: 1 });
 
     game.clickCard(card('3D'));
-    expect(game.panel).toMatchObject({ kind: 'steps', done: 1, total: 2 });
-
+    expect(game.panel).toMatchObject({ kind: 'steps', done: 1, total: 3 });
     game.clickCard(card('2C'));
+    expect(game.panel).toMatchObject({ kind: 'steps', done: 2, total: 3 });
+    expect(locate(game.state, card('AC')).loc).toBe(5);
+
+    game.clickCard(card('AC'));
     expect(locate(game.state, card('AC')).loc).toBe(FOUNDATION);
+    expect(locate(game.state, card('2C')).loc).toBe(FOUNDATION);
     expect(game.panel).toEqual({ kind: 'achieved', card: card('AC') });
     expect(game.hintTarget).toBeNull();
 
@@ -234,8 +269,7 @@ describe('hints', () => {
     await game.start(1);
     game.hint();
     game.hint();
-    expect(game.playHintStep()).toBe(true);
-    expect(game.playHintStep()).toBe(true);
+    for (let i = 0; i < 3; i++) expect(game.playHintStep()).toBe(true);
     expect(game.panel).toMatchObject({ kind: 'achieved' });
   });
 
@@ -265,10 +299,11 @@ describe('hints', () => {
     await game.start(617);
     game.hint();
     game.hint();
-    const panel = game.panel as { steps: unknown[]; reasons: unknown[] };
+    const panel = game.panel as { target: number; steps: unknown[]; reasons: unknown[] };
+    expect(panel.steps.length).toBeGreaterThan(2);
     expect(panel.reasons).toHaveLength(panel.steps.length);
-    expect(panel.reasons.at(-1)).toEqual({ kind: 'release', card: card('AC') });
-    expect(panel.reasons.every((reason) => reason !== null)).toBe(true);
+    expect(panel.reasons.at(-2)).toEqual({ kind: 'uncover', card: panel.target });
+    expect(panel.reasons.slice(0, -1).every((reason) => reason !== null)).toBe(true);
   });
 
   it('takes the hint when the player clicks the card it points at', async () => {
@@ -302,6 +337,23 @@ describe('hints', () => {
     expect(game.panel).toEqual({ kind: 'thinking' });
     await settle();
     expect(game.panel).toMatchObject({ kind: 'steps', done: 0 });
+  });
+
+  it('suggests bringing a card back down when that is the way through', async () => {
+    const game = await loaded(NEEDS_TAKE_BACK);
+    let broughtBack = false;
+    for (let guard = 0; guard < 400 && !game.won; guard++) {
+      if (game.hintLevel < 2) {
+        game.hint();
+        await settle();
+        continue;
+      }
+      if (game.hintMove!.from > FOUNDATION) broughtBack = true;
+      expect(game.playHintStep()).toBe(true);
+      await settle();
+    }
+    expect(game.won).toBe(true);
+    expect(broughtBack).toBe(true);
   });
 
   it('can be dismissed', async () => {

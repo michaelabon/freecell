@@ -5,17 +5,17 @@ import { stateFromLayout } from './notation.ts';
 import {
   CELL0,
   FOUNDATION,
+  HOME0,
   applyMove,
   assertValid,
-  autoHome,
   canMove,
+  chainHome,
   cloneState,
   hasAnyMove,
   idleCards,
   isSafeHome,
   isWon,
   locate,
-  nextAutoMove,
   runLength,
 } from './state.ts';
 import { reachableState } from './testing.ts';
@@ -91,14 +91,80 @@ describe('safe cards', () => {
     expect(isSafeHome(state, parseCard('5S'))).toBe(false);
   });
 
-  it('finishes any game whose cascades all count down', () => {
+});
+
+describe('cards going home', () => {
+  const sendHome = (state: ReturnType<typeof stateFromLayout>, from: number) => {
+    const card = state.cascades[from].at(-1)!;
+    applyMove(state, { from, to: FOUNDATION });
+    return chainHome(state, card, from).length;
+  };
+
+  it('take the next card of the suit with them when it is in reach', () => {
+    const state = stateFromLayout({ cascades: ['9S 2H', '4H'], cells: ['3H'], home: ['AH'] });
+    expect(sendHome(state, 0)).toBe(2);
+    expect(state.foundations[2]).toBe(4);
+  });
+
+  it('take the card they uncover when it can go', () => {
+    const state = stateFromLayout({ cascades: ['7C AD AS'] });
+    expect(sendHome(state, 0)).toBe(1);
+    expect(state.cascades[0]).toEqual([parseCard('7C')]);
+  });
+
+  it('leave alone a card that could already have gone', () => {
+    const state = stateFromLayout({ cascades: ['AS', 'AD'] });
+    expect(sendHome(state, 0)).toBe(0);
+    expect(state.cascades[1]).toEqual([parseCard('AD')]);
+  });
+
+  it('take a card whether or not something might still need it', () => {
+    const state = stateFromLayout({ cascades: ['3S', '4S'], home: ['2S'] });
+    expect(isSafeHome(state, parseCard('4S'))).toBe(false);
+    expect(sendHome(state, 0)).toBe(1);
+    expect(state.foundations[3]).toBe(4);
+  });
+
+  it('never take a card the player brought back down', () => {
+    const state = stateFromLayout({ cascades: ['AS', '2S'], held: ['2S'] });
+    expect(sendHome(state, 0)).toBe(0);
+    expect(state.foundations[3]).toBe(1);
+  });
+
+  it('carry on as far as the chain goes', () => {
     const state = stateFromLayout({
-      cascades: ['KS QS JS TS 9S 8S 7S 6S', 'KH QH JH TH 9H 8H 7H 6H', 'KD QD JD TD 9D 8D 7D 6D', 'KC QC JC TC 9C 8C 7C 6C'],
-      home: ['5S', '5H', '5D', '5C'],
+      cascades: ['KS QS JS TS 9S 8S 7S 6S 5S 4S 3S 2S AS'],
+      home: ['KH', 'KD', 'KC'],
     });
     assertValid(state);
-    autoHome(state);
+    expect(sendHome(state, 0)).toBe(12);
     expect(isWon(state)).toBe(true);
+  });
+});
+
+describe('taking a card back off a foundation', () => {
+  const state = stateFromLayout({ cascades: ['6S', '9D', ''], cells: [''], home: ['5H'] });
+  const hearts = HOME0 + 2;
+
+  it('is allowed onto a card that accepts it or into an empty column', () => {
+    expect(canMove(state, { from: hearts, to: 0 })).toBe(true);
+    expect(canMove(state, { from: hearts, to: 2 })).toBe(true);
+  });
+
+  it('is not allowed anywhere else', () => {
+    expect(canMove(state, { from: hearts, to: 1 })).toBe(false);
+    expect(canMove(state, { from: hearts, to: CELL0 })).toBe(false);
+    expect(canMove(state, { from: hearts, to: FOUNDATION })).toBe(false);
+    expect(canMove(state, { from: HOME0, to: 2 })).toBe(false);
+  });
+
+  it('marks the card as held', () => {
+    const next = cloneState(state);
+    applyMove(next, { from: hearts, to: 0 });
+    expect(next.cascades[0]).toEqual([parseCard('6S'), parseCard('5H')]);
+    expect(next.foundations[2]).toBe(4);
+    expect(next.held).toEqual([parseCard('5H')]);
+    expect(state.held).toEqual([]);
   });
 });
 
@@ -130,6 +196,12 @@ describe('helpers', () => {
       cells: ['6S', '6H', '6D', '6C'],
     });
     expect(hasAnyMove(stuck)).toBe(false);
+    const rescued = stateFromLayout({
+      cascades: ['3S', '3H', '3D', '3C', '5S', '5H', '5D', '5C'],
+      cells: ['7S', '7H', '7D', '7C'],
+      home: ['2S', '2H'],
+    });
+    expect(hasAnyMove(rescued)).toBe(true);
   });
 });
 
@@ -143,18 +215,9 @@ describe('properties', () => {
     );
   });
 
-  it('leaves no safe card behind after sending cards home', () => {
-    fc.assert(
-      fc.property(reachableState, (state) => {
-        expect(nextAutoMove(state)).toBeNull();
-      }),
-      { numRuns: 300 },
-    );
-  });
-
   it('only ever makes moves the rules allow', () => {
     fc.assert(
-      fc.property(reachableState, fc.array(fc.tuple(fc.nat(12), fc.nat(12)), { maxLength: 40 }), (start, tries) => {
+      fc.property(reachableState, fc.array(fc.tuple(fc.nat(16), fc.nat(12)), { maxLength: 40 }), (start, tries) => {
         const state = cloneState(start);
         for (const [from, to] of tries) {
           if (!canMove(state, { from, to })) continue;

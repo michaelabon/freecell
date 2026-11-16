@@ -1,13 +1,14 @@
-import { type Card, RANK_NAMES, canStack, cardLabel, isRed, rankOf } from './cards.ts';
+import { type Card, RANK_NAMES, canStack, cardLabel, isRed, rankOf, suitOf } from './cards.ts';
 import {
   CASCADE_COUNT,
   CELL0,
   FOUNDATION,
   type GameState,
+  HOME0,
   type Move,
   applyMove,
-  autoHome,
   canGoHome,
+  chainHome,
   cloneState,
   emptyCascadeCount,
   firstFreeCell,
@@ -16,6 +17,7 @@ import {
   isCell,
   locate,
   runLength,
+  sourceCard,
 } from './state.ts';
 import { planStackMove, stackCapacity } from './stackMove.ts';
 
@@ -28,6 +30,8 @@ export type Refusal =
   | { kind: 'cell-taken' }
   | { kind: 'cell-single' }
   | { kind: 'home-single' }
+  | { kind: 'home-buried'; card: Card }
+  | { kind: 'home-to-cell' }
   | { kind: 'home-order'; card: Card };
 
 export type Attempt = { ok: true; moves: Move[] } | { ok: false; refusal: Refusal };
@@ -42,7 +46,11 @@ interface Grab {
 
 function grab(state: GameState, card: Card): Grab | Refusal {
   const { loc, index } = locate(state, card);
-  if (loc === FOUNDATION) return { kind: 'ignored' };
+  if (loc === FOUNDATION) {
+    const suit = suitOf(card);
+    const onTop = state.foundations[suit] === rankOf(card) + 1;
+    return onTop ? { loc: HOME0 + suit, count: 1 } : { kind: 'home-buried', card };
+  }
   if (isCell(loc)) return { loc, count: 1 };
   const cascade = state.cascades[loc];
   const count = cascade.length - index;
@@ -61,6 +69,8 @@ function noRoom(state: GameState, card: Card, count: number, to: number): Refusa
 
 /** Works out where a clicked card should go, picking the most useful legal destination. */
 export function resolveClick(state: GameState, card: Card): Attempt {
+  // Taking a card back off a foundation is rare and deliberate, so it takes a drag.
+  if (locate(state, card).loc === FOUNDATION) return refuse({ kind: 'ignored' });
   const grabbed = grab(state, card);
   if ('kind' in grabbed) return refuse(grabbed);
   const { loc, count } = grabbed;
@@ -110,6 +120,15 @@ export function resolveDrop(state: GameState, card: Card, to: number): Attempt {
   const { loc, count } = grabbed;
   if (loc === to) return refuse({ kind: 'ignored' });
 
+  if (loc >= HOME0) {
+    if (to === FOUNDATION) return refuse({ kind: 'ignored' });
+    if (isCell(to)) return refuse({ kind: 'home-to-cell' });
+    const pile = state.cascades[to];
+    if (pile.length > 0 && !canStack(card, pile[pile.length - 1])) {
+      return refuse({ kind: 'bad-stack', card, onto: pile[pile.length - 1] });
+    }
+    return accept([{ from: loc, to }]);
+  }
   if (to === FOUNDATION) {
     if (count > 1) return refuse({ kind: 'home-single' });
     return canGoHome(state, card) ? accept([{ from: loc, to }]) : refuse({ kind: 'home-order', card });
@@ -135,11 +154,20 @@ export interface Played {
   autoFrom: number;
 }
 
-/** Applies a player's moves to a copy of the state, then sends every safe card home. */
+/**
+ * Applies a player's moves to a copy of the state. A card sent home takes
+ * with it whatever that makes playable, and nothing else goes up by itself.
+ */
 export function play(state: GameState, moves: Move[]): Played {
   const next = cloneState(state);
-  for (const move of moves) applyMove(next, move);
-  return { state: next, moves: [...moves, ...autoHome(next)], autoFrom: moves.length };
+  const all: Move[] = [];
+  for (const move of moves) {
+    const card = move.to === FOUNDATION ? sourceCard(next, move.from) : null;
+    applyMove(next, move);
+    all.push(move);
+    if (card !== null) all.push(...chainHome(next, card, move.from));
+  }
+  return { state: next, moves: all, autoFrom: moves.length };
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -191,6 +219,10 @@ export function explain(refusal: Refusal): string {
       return 'A free cell holds just one card.';
     case 'home-single':
       return 'Cards go up to the foundation one at a time.';
+    case 'home-buried':
+      return `Only the top card of a foundation can come back down, and the ${cardLabel(refusal.card)} is under others.`;
+    case 'home-to-cell':
+      return 'A card from the foundation can only come back down onto a column.';
     case 'home-order': {
       const rank = rankOf(refusal.card);
       if (rank === 0) return '';

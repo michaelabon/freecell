@@ -1,20 +1,18 @@
-import { type Card, cardLabel } from './cards.ts';
+import { type Card, cardLabel, rankOf, suitOf } from './cards.ts';
 import {
   CASCADE_COUNT,
-  CELL0,
   FOUNDATION,
   type GameState,
+  HOME0,
   type Move,
-  autoHome,
   canGoHome,
   cloneState,
   firstFreeCell,
   isCascade,
   locate,
-  nextAutoMove,
   sourceCard,
 } from './state.ts';
-import { type SolverMove, applySolverMove, applyStackMove, canonicalKey } from './solver.ts';
+import { type SolverMove, applySolverMove, canonicalKey } from './solver.ts';
 import { planStackMove } from './stackMove.ts';
 
 export type Destination = { kind: 'home' } | { kind: 'cell' } | { kind: 'empty' } | { kind: 'onto'; card: Card };
@@ -25,13 +23,15 @@ export interface Step {
   card: Card;
   count: number;
   dest: Destination;
+  /** Set when the card comes back down off a foundation. */
+  fromHome?: true;
 }
 
 export function toSteps(start: GameState, moves: SolverMove[]): Step[] {
   const state = cloneState(start);
   return moves.map((move) => {
     const source = isCascade(move.from) ? state.cascades[move.from] : null;
-    const card = source ? source[source.length - move.count] : state.cells[move.from - CELL0]!;
+    const card = source ? source[source.length - move.count] : sourceCard(state, move.from)!;
     let dest: Destination;
     if (move.to === FOUNDATION) dest = { kind: 'home' };
     else if (!isCascade(move.to)) dest = { kind: 'cell' };
@@ -40,15 +40,26 @@ export function toSteps(start: GameState, moves: SolverMove[]): Step[] {
       dest = target.length ? { kind: 'onto', card: target[target.length - 1] } : { kind: 'empty' };
     }
     applySolverMove(state, move);
-    return { card, count: move.count, dest };
+    const step: Step = { card, count: move.count, dest };
+    if (move.from >= HOME0) step.fromHome = true;
+    return step;
   });
 }
 
 /** Maps a step onto the columns and cells of `state`, or null when it no longer applies. */
 export function resolveStep(state: GameState, step: Step): SolverMove | null {
   const { loc, index } = locate(state, step.card);
-  if (loc === FOUNDATION) return null;
-  if (isCascade(loc) && state.cascades[loc].length - index !== step.count) return null;
+  let from = loc;
+  if (loc === FOUNDATION) {
+    const suit = suitOf(step.card);
+    if (!step.fromHome || state.foundations[suit] !== rankOf(step.card) + 1) return null;
+    if (step.dest.kind === 'home' || step.dest.kind === 'cell') return null;
+    from = HOME0 + suit;
+  } else if (step.fromHome) {
+    return null;
+  } else if (isCascade(loc) && state.cascades[loc].length - index !== step.count) {
+    return null;
+  }
 
   let to = -1;
   switch (step.dest.kind) {
@@ -69,7 +80,7 @@ export function resolveStep(state: GameState, step: Step): SolverMove | null {
       break;
     }
   }
-  return to < 0 ? null : { from: loc, to, count: step.count };
+  return to < 0 ? null : { from, to, count: step.count };
 }
 
 export function stepMoves(state: GameState, step: Step): Move[] | null {
@@ -82,7 +93,7 @@ export function stepMoves(state: GameState, step: Step): Move[] | null {
 export interface HintPlan {
   /** The next card the line of play sends to the foundation. */
   target: Card;
-  /** The moves that get it there. */
+  /** The moves that get it there, ending with the one that sends it up. */
   steps: Step[];
 }
 
@@ -91,14 +102,8 @@ export function buildPlan(start: GameState, steps: Step[]): HintPlan | null {
   for (let i = 0; i < steps.length; i++) {
     const move = resolveStep(state, steps[i]);
     if (!move) return null;
-    applyStackMove(state, move);
-    let target: Card | null = move.to === FOUNDATION ? steps[i].card : null;
-    if (target === null) {
-      const auto = nextAutoMove(state);
-      if (auto) target = sourceCard(state, auto.from);
-    }
-    if (target !== null) return { target, steps: steps.slice(0, i + 1) };
-    autoHome(state);
+    if (move.to === FOUNDATION) return { target: steps[i].card, steps: steps.slice(0, i + 1) };
+    applySolverMove(state, move);
   }
   return null;
 }
@@ -114,12 +119,12 @@ export function keyAfter(start: GameState, step: Step): string | null {
 
 /** What a step is for, in terms of the steps that come after it. */
 export type Reason =
-  | { kind: 'release'; card: Card }
   | { kind: 'uncover'; card: Card }
   | { kind: 'clear'; card: Card; for: Card }
   | { kind: 'landing'; card: Card }
   | { kind: 'column' }
-  | { kind: 'cell' };
+  | { kind: 'cell' }
+  | { kind: 'chain'; cards: Card[] };
 
 export function stepReasons(start: GameState, steps: Step[]): (Reason | null)[] {
   interface Info {
@@ -128,7 +133,7 @@ export function stepReasons(start: GameState, steps: Step[]): (Reason | null)[] 
     moved: Card[];
     uncovered: Card | null;
     emptied: boolean;
-    released: Card | null;
+    followers: Card[];
   }
   const state = cloneState(start);
   const infos: Info[] = [];
@@ -137,28 +142,38 @@ export function stepReasons(start: GameState, steps: Step[]): (Reason | null)[] 
     if (!move) break;
     const source = isCascade(move.from) ? state.cascades[move.from] : null;
     const moved = source ? source.slice(source.length - move.count) : [step.card];
-    applyStackMove(state, move);
-    const auto = nextAutoMove(state);
+    const remaining = source ? source.length - move.count : 0;
+    const before = state.foundations.slice();
+    applySolverMove(state, move);
+    const followers: Card[] = [];
+    if (move.to === FOUNDATION) {
+      for (let suit = 0; suit < 4; suit++) {
+        for (let rank = before[suit]; rank < state.foundations[suit]; rank++) {
+          if (rank * 4 + suit !== step.card) followers.push(rank * 4 + suit);
+        }
+      }
+    }
     infos.push({
       step,
-      fromCell: source === null,
+      fromCell: source === null && move.from < FOUNDATION,
       moved,
-      uncovered: source && source.length > 0 ? source[source.length - 1] : null,
-      emptied: source !== null && source.length === 0,
-      released: auto ? sourceCard(state, auto.from) : null,
+      uncovered: source && remaining > 0 ? source[remaining - 1] : null,
+      emptied: source !== null && remaining === 0,
+      followers,
     });
-    autoHome(state);
   }
 
   return steps.map((step, i) => {
     const info = infos[i];
-    if (!info || step.dest.kind === 'home') return null;
-    if (info.released !== null) return { kind: 'release', card: info.released };
+    if (!info) return null;
+    if (step.dest.kind === 'home') return info.followers.length > 0 ? { kind: 'chain', cards: info.followers } : null;
     const later = infos.slice(i + 1);
     const uncovered = info.uncovered;
-    if (uncovered !== null && later.some((l) => l.moved.includes(uncovered))) return { kind: 'uncover', card: uncovered };
-    const needs = uncovered === null ? undefined : later.find((l) => l.step.dest.kind === 'onto' && l.step.dest.card === uncovered);
-    if (needs) return { kind: 'clear', card: uncovered!, for: needs.step.card };
+    if (uncovered !== null) {
+      if (later.some((l) => l.moved.includes(uncovered))) return { kind: 'uncover', card: uncovered };
+      const needs = later.find((l) => l.step.dest.kind === 'onto' && l.step.dest.card === uncovered);
+      if (needs) return { kind: 'clear', card: uncovered, for: needs.step.card };
+    }
     const top = info.moved[info.moved.length - 1];
     const lander = later.find((l) => l.step.dest.kind === 'onto' && l.step.dest.card === top);
     if (lander) return { kind: 'landing', card: lander.step.card };
@@ -170,8 +185,6 @@ export function stepReasons(start: GameState, steps: Step[]): (Reason | null)[] 
 
 export function reasonParts(reason: Reason): (string | Card)[] {
   switch (reason.kind) {
-    case 'release':
-      return ['frees the ', reason.card, ' to go home'];
     case 'uncover':
       return ['uncovers the ', reason.card];
     case 'clear':
@@ -182,6 +195,16 @@ export function reasonParts(reason: Reason): (string | Card)[] {
       return ['opens up a column'];
     case 'cell':
       return ['frees a cell'];
+    case 'chain': {
+      const { cards } = reason;
+      if (cards.length > 3) return [`takes ${cards.length} more cards up with it`];
+      const parts: (string | Card)[] = ['takes the '];
+      cards.forEach((card, i) => {
+        if (i > 0) parts.push(i === cards.length - 1 ? ' and the ' : ', the ');
+        parts.push(card);
+      });
+      return [...parts, ' up with it'];
+    }
   }
 }
 
@@ -190,6 +213,10 @@ export function stepParts(step: Step): (string | Card)[] {
   const riders = step.count - 1;
   const stack: (string | Card)[] = ['the ', step.card];
   if (riders > 0) stack.push(riders === 1 ? ' and the card on it' : ` and the ${riders} cards on it`);
+  if (step.fromHome) {
+    const where: (string | Card)[] = step.dest.kind === 'onto' ? [' onto the ', step.dest.card] : [' into an empty column'];
+    return ['Bring ', ...stack, ' back down', ...where];
+  }
   switch (step.dest.kind) {
     case 'home':
       return ['Send ', ...stack, ' up to the foundation'];

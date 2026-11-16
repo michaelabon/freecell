@@ -4,15 +4,22 @@ export const CASCADE_COUNT = 8;
 export const CELL_COUNT = 4;
 export const CELL0 = CASCADE_COUNT;
 export const FOUNDATION = CELL0 + CELL_COUNT;
+/** Source locations for taking the top card back off a foundation: HOME0 + suit. */
+export const HOME0 = FOUNDATION + 1;
 
 export interface GameState {
   cascades: Card[][];
   cells: (Card | null)[];
   /** Indexed by suit: how many cards of that suit are home. */
   foundations: number[];
+  /** Cards the player took back off a foundation, which never go up by themselves again. */
+  held: Card[];
 }
 
-/** Moves the single card on top of `from`. Locations: 0..7 cascades, 8..11 cells, 12 foundation. */
+/**
+ * Moves the single card on top of `from`. Locations: 0..7 cascades, 8..11
+ * cells, 12 the foundation as a destination, 13..16 a foundation as a source.
+ */
 export interface Move {
   from: number;
   to: number;
@@ -26,6 +33,7 @@ export function emptyState(): GameState {
     cascades: Array.from({ length: CASCADE_COUNT }, () => []),
     cells: Array.from({ length: CELL_COUNT }, () => null),
     foundations: [0, 0, 0, 0],
+    held: [],
   };
 }
 
@@ -34,6 +42,7 @@ export function cloneState(state: GameState): GameState {
     cascades: state.cascades.map((cascade) => cascade.slice()),
     cells: state.cells.slice(),
     foundations: state.foundations.slice(),
+    held: state.held.length ? state.held.slice() : [],
   };
 }
 
@@ -43,6 +52,11 @@ export function sourceCard(state: GameState, loc: number): Card | null {
     return cascade.length ? cascade[cascade.length - 1] : null;
   }
   if (isCell(loc)) return state.cells[loc - CELL0];
+  if (loc >= HOME0) {
+    const suit = loc - HOME0;
+    const count = state.foundations[suit];
+    return count > 0 ? (count - 1) * 4 + suit : null;
+  }
   return null;
 }
 
@@ -57,8 +71,10 @@ export function canPlace(state: GameState, card: Card, to: number): boolean {
 }
 
 export function canMove(state: GameState, move: Move): boolean {
-  if (move.from === move.to || move.from >= FOUNDATION || move.from < 0) return false;
+  if (move.from === move.to || move.from === FOUNDATION || move.from < 0 || move.from > HOME0 + 3) return false;
   if (move.to < 0 || move.to > FOUNDATION) return false;
+  // A card only comes back off a foundation onto a cascade.
+  if (move.from >= HOME0 && !isCascade(move.to)) return false;
   const card = sourceCard(state, move.from);
   return card !== null && canPlace(state, card, move.to);
 }
@@ -68,44 +84,66 @@ export function applyMove(state: GameState, move: Move): void {
   let card: Card;
   if (isCascade(move.from)) {
     card = state.cascades[move.from].pop()!;
-  } else {
+  } else if (isCell(move.from)) {
     card = state.cells[move.from - CELL0]!;
     state.cells[move.from - CELL0] = null;
+  } else {
+    const suit = move.from - HOME0;
+    card = --state.foundations[suit] * 4 + suit;
+    if (!state.held.includes(card)) state.held.push(card);
   }
   if (move.to === FOUNDATION) state.foundations[suitOf(card)]++;
   else if (isCell(move.to)) state.cells[move.to - CELL0] = card;
   else state.cascades[move.to].push(card);
 }
 
-// A card is safe to send home when nothing still in play could need to sit on
-// it: every opposite-colour card one rank lower is home, or can itself go home
-// without stranding anything (which is what the second clause checks).
-export function isSafeHome(state: GameState, card: Card): boolean {
-  if (!canGoHome(state, card)) return false;
-  const rank = rankOf(card);
-  const suit = suitOf(card);
-  const f = state.foundations;
-  const oppositeMin = isRed(card) ? Math.min(f[0], f[3]) : Math.min(f[1], f[2]);
-  return oppositeMin >= rank || (oppositeMin >= rank - 1 && f[3 - suit] >= rank - 2);
-}
-
-export function nextAutoMove(state: GameState): Move | null {
-  for (let loc = 0; loc < FOUNDATION; loc++) {
-    const card = sourceCard(state, loc);
-    if (card !== null && isSafeHome(state, card)) return { from: loc, to: FOUNDATION };
+/** Where a card can be picked up from, or -1 when it is buried or home. */
+export function accessibleAt(state: GameState, card: Card): number {
+  const cell = state.cells.indexOf(card);
+  if (cell >= 0) return CELL0 + cell;
+  for (let c = 0; c < CASCADE_COUNT; c++) {
+    const cascade = state.cascades[c];
+    if (cascade.length > 0 && cascade[cascade.length - 1] === card) return c;
   }
-  return null;
+  return -1;
 }
 
-/** Mutates `state`, sending every safe card home, and returns the moves it made. */
-export function autoHome(state: GameState): Move[] {
+/**
+ * Mutates `state` after `card` went home from `from`, sending up each card
+ * that this made playable: the next card of the suit if it is in reach, and
+ * the card it uncovered. Each of those can set off more. Held cards stay put.
+ */
+export function chainHome(state: GameState, card: Card, from: number): Move[] {
   const moves: Move[] = [];
-  for (let move = nextAutoMove(state); move; move = nextAutoMove(state)) {
+  const pending: { card: Card; from: number }[] = [{ card, from }];
+  const send = (next: Card, at: number): void => {
+    if (at < 0 || state.held.includes(next) || !canGoHome(state, next)) return;
+    const move = { from: at, to: FOUNDATION };
     applyMove(state, move);
     moves.push(move);
+    pending.push({ card: next, from: at });
+  };
+  for (let event = pending.shift(); event; event = pending.shift()) {
+    if (rankOf(event.card) < 12) send(event.card + 4, accessibleAt(state, event.card + 4));
+    if (isCascade(event.from)) {
+      const cascade = state.cascades[event.from];
+      if (cascade.length > 0) send(cascade[cascade.length - 1], event.from);
+    }
   }
   return moves;
 }
+
+// Nothing still in play could need to sit on this card: every opposite-colour
+// card one rank lower is home, or can itself go home without stranding
+// anything (which is what the second clause checks).
+export function isUnneeded(state: GameState, card: Card): boolean {
+  const rank = rankOf(card);
+  const f = state.foundations;
+  const oppositeMin = isRed(card) ? Math.min(f[0], f[3]) : Math.min(f[1], f[2]);
+  return oppositeMin >= rank || (oppositeMin >= rank - 1 && f[3 - suitOf(card)] >= rank - 2);
+}
+
+export const isSafeHome = (state: GameState, card: Card): boolean => canGoHome(state, card) && isUnneeded(state, card);
 
 export const homeCount = (state: GameState): number =>
   state.foundations[0] + state.foundations[1] + state.foundations[2] + state.foundations[3];
@@ -172,11 +210,13 @@ export function idleCards(state: GameState): Card[] {
 }
 
 export function hasAnyMove(state: GameState): boolean {
-  if (freeCellCount(state) > 0 || emptyCascadeCount(state) > 0) return !isWon(state);
-  for (let from = 0; from < FOUNDATION; from++) {
+  if (isWon(state)) return false;
+  if (freeCellCount(state) > 0 || emptyCascadeCount(state) > 0) return true;
+  for (let from = 0; from <= HOME0 + 3; from++) {
+    if (from === FOUNDATION) continue;
     const card = sourceCard(state, from);
     if (card === null) continue;
-    if (canGoHome(state, card)) return true;
+    if (from < FOUNDATION && canGoHome(state, card)) return true;
     for (let to = 0; to < CASCADE_COUNT; to++) {
       if (to !== from && canPlace(state, card, to)) return true;
     }
@@ -197,4 +237,7 @@ export function assertValid(state: GameState): void {
     for (let rank = 0; rank < count; rank++) mark(rank * 4 + suit);
   });
   if (seen.some((n) => n !== 1)) throw new Error('State does not hold all 52 cards');
+  if (!Array.isArray(state.held) || state.held.some((card) => !Number.isInteger(card) || card < 0 || card > 51)) {
+    throw new Error('Invalid held list');
+  }
 }

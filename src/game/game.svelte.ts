@@ -27,7 +27,7 @@ import {
 import type { Analysis, Analyst } from '../worker/protocol.ts';
 
 const SAVE_KEY = 'freecell:game';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 const ACHIEVED_MS = 2600;
 
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;

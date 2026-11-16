@@ -6,11 +6,13 @@ import { stateFromLayout } from './notation.ts';
 import { prunePlan, refineLine, reorderPlan } from './refine.ts';
 import { solve } from './solver.ts';
 import { type GameState, isWon } from './state.ts';
-import { dealt, playOut } from './testing.ts';
+import { deal } from './deal.ts';
+import { playOut } from './testing.ts';
 
 const card = parseCard;
 const onto = (code: string, target: string): Step => ({ card: card(code), count: 1, dest: { kind: 'onto', card: card(target) } });
 const park = (code: string): Step => ({ card: card(code), count: 1, dest: { kind: 'cell' } });
+const home = (code: string): Step => ({ card: card(code), count: 1, dest: { kind: 'home' } });
 
 const quickLine = (state: GameState): Step[] | null => {
   const result = solve(state, { beamWidths: [48, 400], quickProofLimit: 0, proofLimit: 0 });
@@ -19,7 +21,7 @@ const quickLine = (state: GameState): Step[] | null => {
 
 describe('prunePlan', () => {
   const state = stateFromLayout({ cascades: ['AC 9D 4H', 'TS KS', '5S', '7C 3H'] });
-  const needed = [park('KS'), onto('4H', '5S'), onto('9D', 'TS')];
+  const needed = [park('KS'), onto('4H', '5S'), onto('9D', 'TS'), home('AC')];
 
   it('drops moves the target can get home without', () => {
     expect(prunePlan(state, [park('3H'), ...needed], card('AC'))).toEqual(needed);
@@ -37,8 +39,8 @@ describe('prunePlan', () => {
 
 describe('reorderPlan', () => {
   const state = stateFromLayout({ cascades: ['AC 9D 4H', 'TS 6C KS', '5S'] });
-  const steps = [park('KS'), onto('4H', '5S'), park('6C'), onto('9D', 'TS')];
-  const tidy = [onto('4H', '5S'), park('KS'), park('6C'), onto('9D', 'TS')];
+  const steps = [park('KS'), onto('4H', '5S'), park('6C'), onto('9D', 'TS'), home('AC')];
+  const tidy = [onto('4H', '5S'), park('KS'), park('6C'), onto('9D', 'TS'), home('AC')];
 
   it('keeps the moves of one dig together and right before the move that needs them', () => {
     expect(reorderPlan(state, steps)).toEqual(tidy);
@@ -46,7 +48,7 @@ describe('reorderPlan', () => {
 
   it('leaves an order alone when changing it would break a move', () => {
     const tight = stateFromLayout({ cascades: ['AC 9D 4H', 'TS KS', '5S'], cells: ['2C', '2D', '2H', ''] });
-    const forced = [onto('4H', '5S'), park('KS'), onto('9D', 'TS')];
+    const forced = [onto('4H', '5S'), park('KS'), onto('9D', 'TS'), home('AC')];
     expect(reorderPlan(tight, forced)).toEqual(forced);
   });
 
@@ -55,7 +57,8 @@ describe('reorderPlan', () => {
       { kind: 'uncover', card: card('9D') },
       { kind: 'uncover', card: card('6C') },
       { kind: 'clear', card: card('TS'), for: card('9D') },
-      { kind: 'release', card: card('AC') },
+      { kind: 'uncover', card: card('AC') },
+      null,
     ]);
   });
 });
@@ -63,15 +66,15 @@ describe('reorderPlan', () => {
 describe('refineLine', () => {
   it('sends a card where a click would send it when that still wins', () => {
     const state = stateFromLayout(ALMOST_WON);
-    const refined = refineLine(state, [park('KS')], quickLine);
-    expect(refined.steps).toEqual([{ card: card('KS'), count: 1, dest: { kind: 'empty' } }]);
-    expect(refined.planLength).toBe(1);
+    const refined = refineLine(state, [park('KS'), home('QS')], quickLine);
+    expect(refined.steps).toEqual([{ card: card('KS'), count: 1, dest: { kind: 'empty' } }, home('QS')]);
+    expect(refined.planLength).toBe(2);
   });
 
   it('still wins, and never lengthens the plan, across the first sixty deals', () => {
     let shorter = 0;
     for (let n = 1; n <= 60; n++) {
-      const start = dealt(n);
+      const start = deal(n);
       const line = toSteps(start, solve(start).moves);
       const refined = refineLine(start, line, quickLine);
       expect(isWon(playOut(start, refined.steps)), `deal ${n}`).toBe(true);

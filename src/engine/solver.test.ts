@@ -3,16 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { play } from './actions.ts';
 import { deal } from './deal.ts';
 import { buildPlan, keyAfter, resolveStep, stepMoves, toSteps } from './hint.ts';
+import { NEEDS_TAKE_BACK } from './fixtures.ts';
 import { stateFromLayout } from './notation.ts';
 import { canonicalKey, legalMoves, solve } from './solver.ts';
-import { FOUNDATION, type GameState, autoHome, cloneState, isWon, locate } from './state.ts';
+import { FOUNDATION, HOME0, cloneState, isWon, locate } from './state.ts';
 import { playOut, reachableState } from './testing.ts';
 
-function dealt(dealNumber: number): GameState {
-  const state = deal(dealNumber);
-  autoHome(state);
-  return state;
-}
+const dealt = deal;
 
 describe('solve', () => {
   it('wins the first forty classic deals with moves the game accepts', () => {
@@ -40,6 +37,22 @@ describe('solve', () => {
   it('reports unknown when the budget runs out first', () => {
     const result = solve(dealt(11982), { beamWidths: [4], quickProofLimit: 50, proofLimit: 50 });
     expect(result.status).toBe('unknown');
+  });
+
+  it('brings a card back down off a foundation when the game needs it', () => {
+    const start = stateFromLayout(NEEDS_TAKE_BACK);
+    expect(solve(start, { takeBack: false }).status).toBe('unwinnable');
+    const result = solve(start);
+    expect(result.status).toBe('winnable');
+    expect(result.moves.some((move) => move.from >= HOME0)).toBe(true);
+    expect(isWon(playOut(start, toSteps(start, result.moves)))).toBe(true);
+  });
+
+  it('never offers to bring back a card nothing could need', () => {
+    const state = stateFromLayout({ cascades: ['6S', '3C'], home: ['5H', '4S', '4C'] });
+    expect(legalMoves(state).some((move) => move.from === HOME0 + 2)).toBe(false);
+    const needed = stateFromLayout({ cascades: ['6S', '4C'], home: ['5H'] });
+    expect(legalMoves(needed)).toContainEqual({ from: HOME0 + 2, to: 0, count: 1 });
   });
 
   it('recognises a finished game', () => {

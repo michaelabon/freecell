@@ -1,6 +1,15 @@
 <script lang="ts">
   import { type Card, parseCard, rankOf, suitOf } from '../engine/cards.ts';
-  import { CELL0, CELL_COUNT, CASCADE_COUNT, FOUNDATION, idleCards, locate, runLength } from '../engine/state.ts';
+  import {
+    CELL0,
+    CELL_COUNT,
+    CASCADE_COUNT,
+    FOUNDATION,
+    idleCards,
+    locate,
+    runLength,
+    sourceCard,
+  } from '../engine/state.ts';
   import type { Game } from '../game/game.svelte.ts';
   import CardView from './Card.svelte';
   import Suit from './Suit.svelte';
@@ -53,7 +62,7 @@
   const glowing = $derived.by(() => {
     const move = game.hintMove;
     if (!move) return new Set<Card>();
-    if (move.from >= CELL0) return new Set([game.state.cells[move.from - CELL0]!]);
+    if (move.from >= CELL0) return new Set([sourceCard(game.state, move.from)!]);
     const cascade = game.state.cascades[move.from];
     return new Set(cascade.slice(cascade.length - move.count));
   });
@@ -74,7 +83,10 @@
   function stackFrom(card: Card): { cards: Card[]; movable: boolean } | null {
     const state = game.state;
     const { loc, index } = locate(state, card);
-    if (loc === FOUNDATION) return null;
+    if (loc === FOUNDATION) {
+      const onTop = state.foundations[suitOf(card)] === rankOf(card) + 1;
+      return onTop ? { cards: [card], movable: true } : null;
+    }
     if (loc >= CELL0) return { cards: [card], movable: true };
     const cascade = state.cascades[loc];
     return { cards: cascade.slice(index), movable: cascade.length - index <= runLength(cascade) };

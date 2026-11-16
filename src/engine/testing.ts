@@ -3,12 +3,11 @@ import { play } from './actions.ts';
 import { deal } from './deal.ts';
 import { type Step, stepMoves } from './hint.ts';
 import { applySolverMove, legalMoves } from './solver.ts';
-import { type GameState, applyMove, assertValid, autoHome, canMove, cloneState } from './state.ts';
+import { type GameState, applyMove, assertValid, canMove, cloneState } from './state.ts';
 
 /** A reachable position: a numbered deal followed by an arbitrary run of legal moves. */
 export function walk(dealNumber: number, picks: number[]): GameState {
   const state = deal(dealNumber);
-  autoHome(state);
   for (const pick of picks) {
     const moves = legalMoves(state);
     if (moves.length === 0) break;
@@ -35,11 +34,5 @@ export function playOut(start: GameState, steps: Step[]): GameState {
     state = play(state, moves).state;
     assertValid(state);
   }
-  return state;
-}
-
-export function dealt(dealNumber: number): GameState {
-  const state = deal(dealNumber);
-  autoHome(state);
   return state;
 }

@@ -62,14 +62,15 @@
   role="button"
   aria-label="{RANK_NAMES[rankOf(card)]} of {SUIT_NAMES[suitOf(card)]}"
   style:transform="translate3d({x}px, {y}px, 0) scale({scale})"
+  style:--index="{index}px"
   style:z-index={dragging ? 2000 + z : lifted ? 1000 + z : z}
 >
   <div class="face" bind:this={face}>
-    <div class="index" style:font-size="{index}px">
+    <div class="index">
       <span class="pip"><Suit suit={suitOf(card)} /></span>
       <span class="rank">{RANK_LABELS[rankOf(card)]}</span>
     </div>
-    <div class="big">{RANK_LABELS[rankOf(card)]}</div>
+    <div class="big"><span>{RANK_LABELS[rankOf(card)]}</span></div>
     {#if sparkle}
       <div
         class="sparkle"
@@ -142,6 +143,7 @@
     justify-content: space-between;
     height: 1.22em;
     padding: 0 5%;
+    font-size: var(--index);
     font-weight: 800;
     line-height: 1;
     letter-spacing: -0.07em;
@@ -150,12 +152,11 @@
     width: 0.82em;
     height: 0.82em;
   }
-  /* Sits below the widest fan so it only shows on a card nothing covers. */
   .big {
     position: absolute;
     left: 0;
     right: 0;
-    top: 46%;
+    top: calc(var(--index) * 1.22);
     bottom: 0;
     display: grid;
     place-items: center;
@@ -163,6 +164,12 @@
     font-weight: 800;
     line-height: 1;
     letter-spacing: -0.07em;
+  }
+
+  /* Trimming the line box to the digits themselves is what makes the centring exact. */
+  .big span {
+    display: block;
+    text-box: trim-both cap alphabetic;
   }
 
   .sparkle {

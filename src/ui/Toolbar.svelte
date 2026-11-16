@@ -7,7 +7,7 @@
   let draft = $state('');
 
   function edit() {
-    draft = String(game.dealNumber);
+    draft = game.dealNumber > 0 ? String(game.dealNumber) : '';
     editing = true;
   }
 
@@ -40,7 +40,9 @@
         />
       </form>
     {:else if game.ready}
-      <button class="deal" onclick={edit} title="Play a specific deal">Deal #{game.dealNumber}</button>
+      <button class="deal" onclick={edit} title="Play a specific deal">
+        {game.dealNumber > 0 ? `Deal #${game.dealNumber}` : 'Custom position'}
+      </button>
     {/if}
   </div>
   <nav>

@@ -214,19 +214,32 @@ export class Game {
     }
   }
 
+  /** Starts a game from an arbitrary position instead of a numbered deal. */
+  async loadPosition(start: GameState): Promise<void> {
+    assertValid(start);
+    const epoch = ++this.#epoch;
+    const opening = play(start, []);
+    const analysis = await this.#analyst.analyse(opening.state);
+    if (epoch !== this.#epoch) return;
+    this.#begin(0, start, opening.state, opening.moves, analysis);
+  }
+
   #begin(dealNumber: number, raw: GameState, state: GameState, opening: Move[], analysis: Analysis): void {
     this.flush();
     this.#clearTransient();
     this.#hintLevel = 0;
     this.#goal = null;
     this.dealNumber = dealNumber;
-    this.#positions = [{ state, enteredAt: this.#now(), verdict: 'winnable', analysis }];
+    const verdict = analysis.status === 'unknown' ? null : analysis.status;
+    this.#positions = [{ state, enteredAt: this.#now(), verdict, analysis }];
     this.#cursor = 0;
     this.#analysis = analysis;
+    this.#snoozed = false;
     this.view = raw;
     this.#animate(opening);
     this.dealing = false;
     this.#save();
+    if (!isWon(state)) this.#judged();
   }
 
   clickCard(card: Card): boolean {

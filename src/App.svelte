@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { stateFromLayout } from './engine/notation.ts';
   import { Game } from './game/game.svelte.ts';
   import Board from './ui/Board.svelte';
   import Drawer from './ui/Drawer.svelte';
@@ -13,7 +14,8 @@
     storage: localStorage,
     stuckDelayMs: params.has('stuckDelay') && stuckDelay >= 0 ? stuckDelay * 1000 : undefined,
   });
-  (window as unknown as { freecell: Game }).freecell = game;
+  // Handles for the browser tests and for poking at the game from the console.
+  Object.assign(window, { freecell: game, freecellLayout: stateFromLayout });
 
   let drawerHeight = $state(0);
 

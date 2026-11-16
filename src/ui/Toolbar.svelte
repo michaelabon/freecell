@@ -127,6 +127,18 @@
     opacity: 0.4;
     cursor: default;
   }
+  @media (max-width: 520px) {
+    header {
+      padding: 8px 2px 10px;
+    }
+    nav {
+      gap: 4px;
+    }
+    nav button {
+      padding: 6px 10px;
+      font-size: 0.84rem;
+    }
+  }
   nav .hint {
     background: var(--accent);
     color: #2b2108;

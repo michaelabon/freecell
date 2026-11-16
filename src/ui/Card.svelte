@@ -9,13 +9,15 @@
     y: number;
     z: number;
     strip: number | null;
+    /** Font size of the corner rank and suit, in pixels. */
+    index: number;
     dragging?: boolean;
     dim?: boolean;
     wiggle?: number;
     sparkle?: boolean;
     glow?: boolean;
   }
-  let { card, x, y, z, strip, dragging = false, dim = false, wiggle = 0, sparkle = false, glow = false }: Props = $props();
+  let { card, x, y, z, strip, index, dragging = false, dim = false, wiggle = 0, sparkle = false, glow = false }: Props = $props();
 
   const LIFT_MS = 380;
   let face: HTMLElement;
@@ -63,11 +65,11 @@
   style:z-index={dragging ? 2000 + z : lifted ? 1000 + z : z}
 >
   <div class="face" bind:this={face}>
-    <div class="index">
-      <span class="rank">{RANK_LABELS[rankOf(card)]}</span>
+    <div class="index" style:font-size="{index}px">
       <span class="pip"><Suit suit={suitOf(card)} /></span>
+      <span class="rank">{RANK_LABELS[rankOf(card)]}</span>
     </div>
-    <div class="emblem"><Suit suit={suitOf(card)} /></div>
+    <div class="big">{RANK_LABELS[rankOf(card)]}</div>
     {#if sparkle}
       <div
         class="sparkle"
@@ -131,29 +133,35 @@
   }
   .index {
     position: absolute;
-    top: 4%;
-    left: 7%;
+    top: 0;
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
-    gap: calc(var(--card-w) * 0.035);
-    height: calc(var(--card-h) * 0.2);
-    font-size: calc(var(--card-h) * 0.185);
-    font-weight: 700;
+    justify-content: space-between;
+    height: 1.22em;
+    padding: 0 5%;
+    font-weight: 800;
     line-height: 1;
-    letter-spacing: -0.04em;
+    letter-spacing: -0.07em;
   }
   .pip {
-    width: calc(var(--card-h) * 0.15);
-    height: calc(var(--card-h) * 0.15);
+    width: 0.82em;
+    height: 0.82em;
   }
-  .emblem {
+  /* Sits below the widest fan so it only shows on a card nothing covers. */
+  .big {
     position: absolute;
-    left: 50%;
-    top: 65%;
-    width: 44%;
-    aspect-ratio: 1;
-    transform: translate(-50%, -50%);
-    opacity: 0.92;
+    left: 0;
+    right: 0;
+    top: 46%;
+    bottom: 0;
+    display: grid;
+    place-items: center;
+    font-size: calc(var(--card-h) * 0.5);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.07em;
   }
 
   .sparkle {

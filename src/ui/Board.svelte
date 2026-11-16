@@ -62,6 +62,12 @@
     return landingSpot(game.state, m, move.to, suitOf(head));
   });
 
+  // The corner rank and suit fill the strip a covered card shows, so they
+  // stay as large as the fan allows instead of shrinking with the card.
+  function indexSize(strip: number | null): number {
+    return Math.min((strip || m.fan) * 0.8, m.cardW * 0.43);
+  }
+
   function stackFrom(card: Card): { cards: Card[]; movable: boolean } | null {
     const state = game.state;
     const { loc, index } = locate(state, card);
@@ -142,6 +148,7 @@
           y={dragged.has(p.card) ? p.y + drag!.dy : p.y}
           z={p.z}
           strip={p.strip}
+          index={indexSize(p.strip)}
           dragging={dragged.has(p.card)}
           dim={idle.has(p.card) && game.hintTarget !== p.card}
           wiggle={wiggling.has(p.card) ? game.wiggle!.nonce : 0}

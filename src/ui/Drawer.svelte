@@ -79,7 +79,7 @@
       <p class="lead">Try to get the {@render name(panel.target)} up to the foundation.</p>
       {#if panel.takeBacks > 0}
         <p class="why">
-          The only way there is to bring {plural(panel.takeBacks, 'card')} back down from the foundations first.
+          Getting there means bringing {plural(panel.takeBacks, 'card')} back down from the foundations first.
         </p>
       {/if}
       <div class="actions">

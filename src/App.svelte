@@ -69,11 +69,13 @@
     height: 100%;
     max-width: 1040px;
     margin: 0 auto;
-    padding: 0 16px 12px;
+    padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
   }
   @media (max-width: 520px) {
     main {
-      padding: 0 6px 8px;
+      padding: env(safe-area-inset-top) max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
+        max(6px, env(safe-area-inset-left));
     }
   }
 </style>

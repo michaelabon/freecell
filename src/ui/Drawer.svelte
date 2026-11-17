@@ -118,7 +118,7 @@
     z-index: 3000;
     width: min(100% - 24px, 640px);
     translate: -50% 0;
-    padding: 14px 44px 16px 18px;
+    padding: 14px 44px max(16px, env(safe-area-inset-bottom)) 18px;
     border-radius: 18px 18px 0 0;
     background: var(--panel);
     color: var(--panel-ink);

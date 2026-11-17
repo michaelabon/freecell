@@ -13,5 +13,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // The solver tests are pure CPU work that takes seconds on a laptop and
+    // several times longer on a shared CI runner, past the default limit.
+    testTimeout: 30_000,
   },
 });

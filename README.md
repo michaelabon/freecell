@@ -11,6 +11,8 @@ pnpm dev        # http://127.0.0.1:5199
 
 `pnpm build` writes a static site to `dist/`, and `pnpm preview` serves it.
 
+A copy is hosted at <https://freecell.michaelabon.ca>. Every merge to `main` is type-checked, tested, built and published to GitHub Pages by `.github/workflows/deploy.yml`. Saved games live in the browser, so the hosted copy and a local one each keep their own.
+
 ## Playing
 
 - **Click or tap a card** to send it to the best legal spot. Clicking a card inside a run moves it together with the cards on top of it, one card at a time, using free cells, empty columns and any other column that will take a card.

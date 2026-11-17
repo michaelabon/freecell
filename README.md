@@ -13,6 +13,12 @@ pnpm dev        # http://127.0.0.1:5199
 
 A copy is hosted at <https://freecell.michaelabon.ca>. Every merge to `main` is type-checked, tested, built and published to GitHub Pages by `.github/workflows/deploy.yml`. Saved games live in the browser, so the hosted copy and a local one each keep their own.
 
+## Installing it
+
+The hosted copy can be kept as an app: **File > Add to Dock** in Safari on a Mac, or **Share > Add to Home Screen** on an iPhone or iPad. The app always opens on the game you left, and it keeps its own saved game, separate from the one in a Safari tab.
+
+`node scripts/icons.ts` redraws the app icons in `public/`.
+
 ## Playing
 
 - **Click or tap a card** to send it to the best legal spot. Clicking a card inside a run moves it together with the cards on top of it, one card at a time, using free cells, empty columns and any other column that will take a card.

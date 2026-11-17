@@ -12,6 +12,7 @@ interface Handle {
   view: GameState;
   hintMove: { from: number; to: number; count: number } | null;
   loadPosition(state: GameState): Promise<void>;
+  newGame(dealNumber?: number): Promise<void>;
 }
 declare global {
   interface Window {
@@ -95,6 +96,23 @@ test('a click moves a card, undo takes it back, and a reload resumes', async ({ 
   expect((await state(page)).cells[0]).toBeNull();
   await page.keyboard.press('r');
   expect((await state(page)).cells[0]).toBe(parseCard('6H'));
+});
+
+test('an installed app resumes the game in progress, whatever deal it was added on', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) =>
+      query === '(display-mode: standalone)' ? ({ ...real(query), matches: true } as MediaQueryList) : real(query);
+  });
+  await open(page, '?deal=617');
+  await page.evaluate(() => window.freecell.newGame(1));
+  await page.waitForFunction(() => window.freecell.ready);
+  await clickCard(page, '6H');
+
+  await page.goto('/?deal=617');
+  await page.waitForFunction(() => window.freecell?.ready);
+  await expect(page.getByRole('button', { name: 'Deal #1' })).toBeVisible();
+  expect(await moveCount(page)).toBe(1);
 });
 
 test('clicking a card inside a run moves the whole stack', async ({ page }) => {

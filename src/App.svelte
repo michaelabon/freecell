@@ -17,11 +17,16 @@
   // Handles for the browser tests and for poking at the game from the console.
   Object.assign(window, { freecell: game, freecellLayout: stateFromLayout });
 
+  // An installed app launches at the address it was added from, so its deal
+  // number is stale and must not replace the game in progress.
+  const installed =
+    matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
+
   let drawerHeight = $state(0);
 
   onMount(() => {
     const deal = Number(params.get('deal'));
-    void game.start(params.has('deal') && Number.isInteger(deal) ? deal : undefined);
+    void game.start(params.has('deal') && !installed && Number.isInteger(deal) ? deal : undefined);
     return () => game.dispose();
   });
 

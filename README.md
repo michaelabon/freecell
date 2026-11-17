@@ -67,6 +67,8 @@ pnpm bench 1 32000   # solve a range of deals and report
 
 Run over the 32,000 original deals, the solver wins 31,998, proves #11982 lost (the one deal known to be unwinnable), and gives up on #27978 without an answer. A deal it can't settle is never dealt.
 
+`pnpm e2e` reuses a dev server already running on port 5199, but only if it is serving this checkout. One started from another worktree stops the run with an error that names it.
+
 Two URL parameters help when testing by hand: `?deal=N` picks the deal and `?stuckDelay=5` shortens the stuck warning to five seconds.
 
 ## Layout

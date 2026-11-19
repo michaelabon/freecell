@@ -48,7 +48,7 @@ A plan holds only the moves its goal needs, ordered so each one leads into the n
 
 ### Stuck detection
 
-Every position is analysed in the background. If the game can no longer be won, you are told 90 seconds after the move that lost it, with an offer to roll back to the last winnable position. Asking for a hint in a lost position tells you straight away, as does running out of moves entirely.
+Every position is analysed in the background. If the game can no longer be won, you are told 20 seconds after the move that lost it, with an offer to roll back to the last winnable position. Asking for a hint in a lost position tells you straight away, as does running out of moves entirely.
 
 ### Deals
 

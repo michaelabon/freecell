@@ -108,7 +108,7 @@ export class Game {
   constructor(options: GameOptions) {
     this.#analyst = options.analyst;
     this.#storage = options.storage ?? null;
-    this.#stuckDelayMs = options.stuckDelayMs ?? 90_000;
+    this.#stuckDelayMs = options.stuckDelayMs ?? 20_000;
     this.#stepMs = options.stepMs ?? 250;
     this.#autoFirstMs = options.autoFirstMs ?? 250;
     this.#autoNextMs = options.autoNextMs ?? 300;
